@@ -47,13 +47,26 @@ persistente em disco: o QR Code é lido **uma única vez**.
 
 ---
 
-## Instalação para desenvolvimento
+## Executar para testes
+
+Basta dar dois cliques no **`rodar.bat`**:
+
+| Comando | O que faz |
+|---------|-----------|
+| `rodar.bat` | **Modo interface** (padrão, rápido). Instala só o essencial — sem compilar módulo nativo e sem baixar o Chromium. Interface, banco, agenda, calendário e modelos funcionam; o envio pelo WhatsApp fica indisponível. |
+| `rodar.bat completo` | Instala tudo, inclusive a integração com o WhatsApp (download maior na primeira vez). |
+| `rodar.bat testes` | Executa apenas os testes automatizados. |
+
+No modo interface o aplicativo usa o **SQLite embutido no Electron** (`node:sqlite`), portanto
+**não é necessário ter o Visual Studio Build Tools instalado**. Quando o `better-sqlite3`
+estiver compilado, o CtrLoja o utiliza automaticamente por ser mais rápido.
+
+### Instalação manual (equivalente)
 
 ```bat
 git clone https://github.com/engelogic-sensorlogic/CtrLoja.git
 cd CtrLoja
-npm install
-npm run rebuild
+npm install --omit=optional
 npm start
 ```
 

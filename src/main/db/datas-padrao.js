@@ -117,8 +117,8 @@ module.exports = [
   },
   {
     chave: 'mac_ufr_fundacao', categoria: 'maconica',
-    titulo: 'Aniversario da A.R.L.S. Uniao Fraternal Rolandense - UFR',
-    descricao: 'AJUSTE A DATA DE FUNDACAO DA LOJA NA TELA DE CALENDARIO.',
-    tipo: 'fixa', dia: 1, mes: 1, enviar: 0
+    titulo: 'Aniversario da A∴R∴L∴S∴ Uniao Fraternal Rolandense nº 141',
+    descricao: 'Fundada em 4 de setembro de 2007, no Oriente de Rolandia - PR, jurisdicionada a Grande Loja Maconica do Estado do Parana, trabalhando no Rito Escoces Antigo e Aceito.',
+    ano_origem: 2007, tipo: 'fixa', dia: 4, mes: 9
   }
 ];

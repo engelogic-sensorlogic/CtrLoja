@@ -39,8 +39,19 @@ App.views.config = {
       campo('Nome da Loja', txt('loja_nome', cfg.loja_nome)),
       el('div', { class: 'linha' }, [
         campo('Sigla', txt('loja_sigla', cfg.loja_sigla)),
+        campo('Numeral', txt('loja_numero', cfg.loja_numero)),
         campo('Potência', txt('potencia', cfg.potencia)),
         campo('Oriente', txt('oriente', cfg.oriente))
+      ]),
+      el('div', { class: 'linha' }, [
+        campo('Rito', txt('rito', cfg.rito)),
+        campo('Data de fundação', el('input', { type: 'date', name: 'fundacao_loja', value: (cfg.fundacao_loja || '').slice(0, 10) })),
+        campo('Dia das sessões', txt('dia_reuniao', cfg.dia_reuniao)),
+        campo('Horário', txt('hora_reuniao', cfg.hora_reuniao))
+      ]),
+      el('div', { class: 'linha' }, [
+        campo('Templo', txt('templo', cfg.templo)),
+        campo('CNPJ', txt('cnpj', cfg.cnpj))
       ])
     ]);
 

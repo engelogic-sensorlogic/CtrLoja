@@ -50,13 +50,9 @@ echo [1/5] Node.js !NODEV! encontrado.
 REM ------------------------------------------------------------------
 REM  2. Dependencias
 REM ------------------------------------------------------------------
-if not exist "node_modules" (
-  echo [2/5] Instalando dependencias ^(npm install^)...
-  call npm install
-  if errorlevel 1 goto :FALHA
-) else (
-  echo [2/5] Dependencias ja instaladas. Use "build.bat limpar" para refazer.
-)
+echo [2/5] Instalando TODAS as dependencias ^(inclusive WhatsApp e SQLite nativo^)...
+call npm install --no-audit --no-fund
+if errorlevel 1 goto :FALHA
 
 REM ------------------------------------------------------------------
 REM  3. Recompilacao do modulo nativo (better-sqlite3) para o Electron
@@ -64,9 +60,13 @@ REM ------------------------------------------------------------------
 echo [3/5] Recompilando modulos nativos para o Electron...
 call npx electron-builder install-app-deps
 if errorlevel 1 (
-  echo [AVISO] Falha ao recompilar modulos nativos. Tentando electron-rebuild...
+  echo [AVISO] Falha com electron-builder. Tentando electron-rebuild...
   call npx electron-rebuild -f -w better-sqlite3
-  if errorlevel 1 goto :FALHA
+  if errorlevel 1 (
+    echo [AVISO] Nao foi possivel compilar o better-sqlite3.
+    echo         O aplicativo continuara funcionando com o SQLite embutido
+    echo         no Electron ^(node:sqlite^). Build prossegue normalmente.
+  )
 )
 
 REM ------------------------------------------------------------------

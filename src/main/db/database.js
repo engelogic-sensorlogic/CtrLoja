@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const Database = require('better-sqlite3');
+const Database = require('./driver');
 
 const DATAS_PADRAO = require('./datas-padrao');
 const TEMPLATES_PADRAO = require('./templates-padrao');
@@ -11,10 +11,17 @@ let conn = null;
 let dbPath = null;
 
 const CONFIG_PADRAO = {
-  loja_nome: 'A∴R∴L∴S∴ União Fraternal Rolandense nº ___',
+  loja_nome: 'A∴R∴L∴S∴ União Fraternal Rolandense nº 141',
   loja_sigla: 'UFR',
+  loja_numero: '141',
   potencia: 'Grande Loja Maçônica do Estado do Paraná - GLP',
   oriente: 'Oriente de Rolândia - PR',
+  rito: 'R∴E∴A∴A∴',
+  fundacao_loja: '2007-09-04',
+  dia_reuniao: 'Segunda-feira',
+  hora_reuniao: '20:00',
+  templo: 'Templo na Chácara Água Limpa — Estrada Rolândia / Caramuru',
+  cnpj: '09.221.964/0001-34',
   titulo_obreiro: 'Ir.∴',
   titulo_cunhada: 'Cunhada',
   titulo_sobrinho: 'Sobrinho',

@@ -3,21 +3,10 @@
 /* Testes automatizados do CtrLoja — execute com:  npm test  */
 
 const path=require('path'), fs=require('fs'), os=require('os');
-const Module=require('module');
-const {DatabaseSync}=require('node:sqlite');
 const raiz = path.join(__dirname, '..', 'src', 'main');
 
-// Shim minimo de better-sqlite3 sobre node:sqlite (apenas para teste)
-class Shim{
-  constructor(f){ this.db=new DatabaseSync(f); }
-  pragma(p){ try{this.db.exec('PRAGMA '+p);}catch(e){} }
-  exec(s){ this.db.exec(s); }
-  prepare(s){ const st=this.db.prepare(s);
-    return { run:(...a)=>st.run(...a), get:(...a)=>st.get(...a), all:(...a)=>st.all(...a) }; }
-  transaction(fn){ return (...a)=>{ this.db.exec('BEGIN'); try{ const r=fn(...a); this.db.exec('COMMIT'); return r;}catch(e){ this.db.exec('ROLLBACK'); throw e; } }; }
-}
-const orig=Module._load;
-Module._load=function(req){ if(req==='better-sqlite3') return Shim; return orig.apply(this,arguments); };
+// O driver do CtrLoja usa better-sqlite3 quando disponivel e, na ausencia dele,
+// o modulo node:sqlite embutido no Node 22+ / Electron 37+. Nada a configurar aqui.
 
 const db=require(path.join(raiz,'db/database.js'));
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'ctrloja-'));
@@ -103,6 +92,20 @@ ok('log gravado', db.envios.listar({de:'2026-01-01',ate:'2026-12-31'}).length>=1
 db.envios.marcarDisparo('2026-07-28',7,7);
 ok('controle de disparo', db.envios.jaDisparado('2026-07-28')===true);
 ok('outro dia nao disparado', db.envios.jaDisparado('2026-07-29')===false);
+
+console.log('== Dados da Loja UFR ==');
+const cfgUFR = db.config.obterTodas();
+ok('nome da Loja com numeral 141', /141/.test(cfgUFR.loja_nome), cfgUFR.loja_nome);
+ok('rito configurado', !!cfgUFR.rito, cfgUFR.rito);
+ok('fundacao 2007-09-04', cfgUFR.fundacao_loja==='2007-09-04', cfgUFR.fundacao_loja);
+const evUFR = agenda.eventosDoDia('2026-09-04');
+ok('aniversario da UFR na agenda', evUFR.some(e=>/Uniao Fraternal Rolandense/i.test(e.evento||'')));
+ok('19 anos de fundacao em 2026', evUFR.find(e=>/Uniao Fraternal/i.test(e.evento||''))?.anos===19);
+ok('mensagem da UFR renderiza', /141/.test(agenda.montarFila('2026-09-04').itens.find(i=>/Uniao Fraternal/i.test(i.evento||'')).mensagem));
+
+console.log('== Driver SQLite ==');
+const drv = require(path.join(raiz,'db/driver.js'));
+ok('motor identificado', ['better-sqlite3','node:sqlite'].includes(drv.motorAtual), drv.motorAtual);
 
 console.log('\n'+(falhas?('FALHAS: '+falhas):'TODOS OS TESTES DE INTEGRACAO PASSARAM'));
 process.exit(falhas?1:0);

@@ -21,7 +21,8 @@ App.views.whatsapp = {
       if (!st.disponivel) {
         boxConexao.appendChild(el('div', {
           class: 'aviso',
-          html: 'A biblioteca <strong>whatsapp-web.js</strong> não está instalada. Execute <code>npm install</code> na pasta do aplicativo.'
+          html: 'Você está no <strong>modo interface</strong>: a biblioteca de integração com o WhatsApp não foi instalada.<br><br>' +
+                'Todo o restante do aplicativo funciona normalmente. Para habilitar o envio real, feche o programa e execute <code>rodar.bat completo</code> (ou <code>build.bat</code>) na pasta do aplicativo.'
         }));
         return;
       }
