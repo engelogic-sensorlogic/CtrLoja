@@ -58,6 +58,7 @@ contextBridge.exposeInMainWorld('api', {
     reiniciar: (visivel) => call('whatsapp:reiniciar', visivel),
     desconectar: () => call('whatsapp:desconectar'),
     limparSessao: () => call('whatsapp:limpar-sessao'),
+    diagnostico: () => call('whatsapp:diagnostico'),
     grupos: () => call('whatsapp:grupos'),
     gruposSalvos: () => call('whatsapp:grupos-salvos'),
     salvarGrupos: (lista) => call('whatsapp:salvar-grupos', lista),

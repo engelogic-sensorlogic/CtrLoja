@@ -105,7 +105,15 @@ function pararVigia() {
   if (vigia) { clearTimeout(vigia); vigia = null; }
 }
 
-/** Derruba o cliente atual sem apagar a sessao gravada em disco. */
+/**
+ * Derruba o cliente atual sem apagar a sessao gravada em disco.
+ *
+ * O destroy() da biblioteca as vezes trava; se isso acontecer, o processo do
+ * Chrome continua vivo segurando a pasta de perfil. A instancia seguinte nao
+ * consegue reaproveitar a sessao e cai na tela de login - foi exatamente esse
+ * o sintoma de "app conectado, navegador pedindo QR Code". Por isso, aqui o
+ * processo do navegador e encerrado a forca quando necessario.
+ */
 async function encerrarCliente() {
   pararVigia();
   const antigo = cliente;
@@ -114,9 +122,79 @@ async function encerrarCliente() {
   ultimoQr = null;
   progresso = null;
   if (!antigo) return;
+
+  const navegador = antigo.pupBrowser;
+
   try {
-    await Promise.race([antigo.destroy(), dormir(8000)]);
+    await Promise.race([antigo.destroy(), dormir(6000)]);
   } catch { /* ignora */ }
+
+  // Garantia: fecha o navegador e mata o processo se ainda estiver de pe
+  try {
+    if (navegador) {
+      const proc = typeof navegador.process === 'function' ? navegador.process() : null;
+      try { await Promise.race([navegador.close(), dormir(4000)]); } catch { /* ignora */ }
+      if (proc && proc.exitCode === null && !proc.killed) {
+        proc.kill('SIGKILL');
+        console.log('[whatsapp] Processo do navegador encerrado à força.');
+      }
+    }
+  } catch (err) {
+    console.warn('[whatsapp] Falha ao encerrar o navegador:', err.message);
+  }
+
+  await dormir(800);   // dá tempo do Windows liberar a pasta de perfil
+}
+
+/**
+ * Consulta a pagina real do WhatsApp Web.
+ * Serve para saber se a sessao continua valida - o estado interno pode
+ * dizer "pronto" enquanto a pagina ja voltou para a tela de login.
+ */
+async function inspecionarPagina() {
+  if (!cliente || !cliente.pupPage) return { disponivel: false };
+  try {
+    const dados = await cliente.pupPage.evaluate(() => {
+      const temQr = !!document.querySelector(
+        'canvas[aria-label*="scan" i], canvas[aria-label*="escane" i], [data-testid="qrcode"], [data-ref]'
+      );
+      const store = window.Store || null;
+      let chats = null;
+      try {
+        if (store && store.Chat && typeof store.Chat.getModelsArray === 'function') {
+          chats = store.Chat.getModelsArray().length;
+        }
+      } catch { chats = null; }
+      return {
+        url: location.href,
+        titulo: document.title,
+        telaDeLogin: temQr,
+        temStore: !!store,
+        temWWebJS: typeof window.WWebJS !== 'undefined',
+        qtdChats: chats,
+        versaoWhatsApp: (window.Debug && window.Debug.VERSION) || null
+      };
+    });
+    return { disponivel: true, ...dados };
+  } catch (err) {
+    return { disponivel: false, erro: err.message || String(err) };
+  }
+}
+
+/** Relatorio tecnico para a tela de diagnostico. */
+async function diagnostico() {
+  const pagina = await inspecionarPagina();
+  let versaoLib = null;
+  try { versaoLib = require('whatsapp-web.js/package.json').version; } catch { /* ignora */ }
+  return {
+    estado,
+    conta: infoConta,
+    temCliente: !!cliente,
+    versaoBiblioteca: versaoLib,
+    navegador: localizarChrome() || '(Chromium interno do puppeteer)',
+    sessao: opcoes.sessionPath,
+    pagina
+  };
 }
 
 /**
@@ -357,6 +435,30 @@ const descreverErro = (err) => {
 async function listarGrupos() {
   exigirPronto();
 
+  // Antes de tudo: a pagina ainda esta autenticada?
+  const pag = await inspecionarPagina();
+  if (pag.disponivel && pag.telaDeLogin) {
+    infoConta = null;
+    setEstado('desconectado');
+    throw new Error(
+      'A sessão do WhatsApp Web caiu — a página voltou para a tela de leitura do QR Code.\n\n' +
+      'Isso costuma acontecer quando:\n' +
+      '• o aparelho removeu o CtrLoja em "Aparelhos conectados";\n' +
+      '• uma segunda janela do navegador assumiu a mesma sessão;\n' +
+      '• a sessão gravada ficou inconsistente.\n\n' +
+      'Clique em "Limpar sessão e reconectar" e leia o QR Code novamente. ' +
+      'Importante: leia o QR que aparece DENTRO do CtrLoja e aguarde o estado mudar para "Conectado" ' +
+      'sem abrir outras janelas nesse meio-tempo.'
+    );
+  }
+  if (pag.disponivel && !pag.temStore) {
+    throw new Error(
+      'A página do WhatsApp Web ainda não terminou de carregar os módulos internos.\n\n' +
+      'Aguarde cerca de 1 minuto e tente novamente. Se persistir, use "Reiniciar conexão".' +
+      (pag.versaoWhatsApp ? `\n\n(WhatsApp Web ${pag.versaoWhatsApp})` : '')
+    );
+  }
+
   const tentativas = [];
   let grupos = null;
 
@@ -388,7 +490,12 @@ async function listarGrupos() {
   }
 
   if (!grupos || !grupos.length) {
-    const detalhe = tentativas.length ? `\n\nDetalhes: ${tentativas.join(' | ')}` : '';
+    const pagFinal = await inspecionarPagina();
+    const contexto = pagFinal.disponivel
+      ? `\n\nEstado da página: ${pagFinal.qtdChats === null ? 'sem acesso à lista de conversas' : pagFinal.qtdChats + ' conversa(s) carregada(s)'}`
+        + `${pagFinal.versaoWhatsApp ? `, WhatsApp Web ${pagFinal.versaoWhatsApp}` : ''}`
+      : '';
+    const detalhe = tentativas.length ? `\n\nDetalhes: ${tentativas.join(' | ')}${contexto}` : contexto;
     throw new Error(
       'Não foi possível ler a lista de grupos.\n\n' +
       'O que costuma resolver:\n' +
@@ -516,5 +623,6 @@ async function enviarTeste(texto, destino = 'grupos') {
 
 module.exports = {
   configure, status, conectar, reiniciar, desconectar, limparSessao, destroy,
-  listarGrupos, enviarFila, enviarTeste, enviarMensagem
+  listarGrupos, enviarFila, enviarTeste, enviarMensagem,
+  diagnostico, inspecionarPagina
 };

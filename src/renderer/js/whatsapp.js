@@ -1,5 +1,48 @@
 'use strict';
 
+async function mostrarDiagnostico() {
+  const d = await tentar(window.api.whatsapp.diagnostico(), 'Falha ao gerar diagnóstico');
+  if (!d) return;
+
+  const p = d.pagina || {};
+  const sn = (v) => (v === null || v === undefined ? '—' : String(v));
+  const linhas = [
+    ['Estado interno', d.estado],
+    ['Conta', d.conta ? `${d.conta.nome || ''} (+${d.conta.numero || ''})` : '—'],
+    ['Cliente ativo', d.temCliente ? 'sim' : 'não'],
+    ['Biblioteca', sn(d.versaoBiblioteca)],
+    ['Navegador', sn(d.navegador)],
+    ['Pasta da sessão', sn(d.sessao)],
+    ['Página acessível', p.disponivel ? 'sim' : `não${p.erro ? ' — ' + p.erro : ''}`],
+    ['Endereço', sn(p.url)],
+    ['Está na tela de login', p.telaDeLogin === undefined ? '—' : (p.telaDeLogin ? 'SIM — sessão caiu' : 'não')],
+    ['Módulos internos (Store)', p.temStore === undefined ? '—' : (p.temStore ? 'carregados' : 'NÃO carregados')],
+    ['Conversas carregadas', sn(p.qtdChats)],
+    ['Versão do WhatsApp Web', sn(p.versaoWhatsApp)]
+  ];
+
+  const tbody = el('tbody');
+  for (const [k, v] of linhas) {
+    tbody.appendChild(el('tr', {}, [
+      el('td', { style: 'font-weight:600;width:210px', text: k }),
+      el('td', { style: 'word-break:break-all', text: v })
+    ]));
+  }
+
+  Modal.abrir({
+    titulo: 'Diagnóstico da conexão',
+    corpo: el('div', {}, [
+      el('table', {}, [tbody]),
+      el('div', {
+        class: 'aviso info', style: 'margin-top:12px',
+        html: 'Se <strong>"Está na tela de login" = SIM</strong>, a sessão caiu: use <em>Limpar sessão e reconectar</em>. '
+          + 'Se <strong>Store = NÃO carregados</strong>, a página ainda está inicializando ou houve mudança do WhatsApp Web.'
+      })
+    ]),
+    botoes: [{ texto: 'Fechar', classe: 'secundario' }]
+  });
+}
+
 App.views.whatsapp = {
   titulo: 'WhatsApp',
   subtitulo: 'Conexão da conta e seleção dos grupos de destino',
@@ -78,6 +121,19 @@ App.views.whatsapp = {
           }
         }));
         acoes.appendChild(el('button', {
+          class: 'btn secundario', text: '🩺 Diagnóstico',
+          onclick: mostrarDiagnostico
+        }));
+        acoes.appendChild(el('button', {
+          class: 'btn perigo', text: 'Limpar sessão e reconectar',
+          onclick: async () => {
+            if (!await confirmar('A sessão salva será apagada e será necessário ler o QR Code novamente. Continuar?')) return;
+            await tentar(window.api.whatsapp.limparSessao(), 'Falha ao limpar a sessão');
+            await tentar(window.api.whatsapp.conectar(), 'Falha ao conectar');
+            pintarConexao();
+          }
+        }));
+        acoes.appendChild(el('button', {
           class: 'btn perigo', text: 'Desconectar',
           onclick: async () => {
             if (!await confirmar('Desconectar a conta? Será necessário ler o QR Code novamente.')) return;
@@ -99,6 +155,11 @@ App.views.whatsapp = {
             else await tentar(window.api.whatsapp.reiniciar(false), 'Falha ao reiniciar');
             pintarConexao();
           }
+        }));
+
+        acoes.appendChild(el('button', {
+          class: 'btn secundario', text: '🩺 Diagnóstico',
+          onclick: mostrarDiagnostico
         }));
 
         acoes.appendChild(el('button', {

@@ -215,6 +215,7 @@ handle('whatsapp:conectar', (opts) => whatsapp.conectar(opts));
 handle('whatsapp:reiniciar', (visivel) => whatsapp.reiniciar(visivel));
 handle('whatsapp:desconectar', () => whatsapp.desconectar());
 handle('whatsapp:limpar-sessao', () => whatsapp.limparSessao());
+handle('whatsapp:diagnostico', () => whatsapp.diagnostico());
 handle('whatsapp:grupos', () => whatsapp.listarGrupos());
 handle('whatsapp:grupos-salvos', () => db.grupos.listar());
 handle('whatsapp:salvar-grupos', (lista) => db.grupos.salvarSelecao(lista));

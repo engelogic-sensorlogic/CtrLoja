@@ -136,6 +136,15 @@ Depois que tudo estiver validado:
 | Desconecta sozinho com frequência | Sessão removida no celular | Confira em *Aparelhos conectados* se o CtrLoja continua lá |
 | Mensagem sai sem negrito | Asteriscos removidos do modelo | Use `*texto*` para negrito e `_texto_` para itálico |
 | Erro de GPU ao abrir | Projeto em unidade de rede | Use `rodar.bat local` |
+| App diz "Conectado" mas não lista grupos | A página do WhatsApp Web voltou para a tela de login | Clique em **🩺 Diagnóstico**. Se *"Está na tela de login" = SIM*, use **Limpar sessão e reconectar** |
+
+### Regra de ouro da reconexão
+
+Ao ler o QR Code, **use apenas a janela do CtrLoja** e espere o estado virar *Conectado*.
+Abrir o "navegador visível" ao mesmo tempo cria uma segunda instância que disputa a mesma
+sessão — o resultado é o aplicativo achar que está conectado enquanto a página real caiu
+para a tela de login. Use o modo visível só para diagnóstico, e sempre a partir de
+**Reiniciar conexão** (que encerra a instância anterior antes de abrir a nova).
 
 ---
 
