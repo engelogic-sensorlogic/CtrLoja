@@ -110,7 +110,8 @@ if !NODEMAJOR! LSS 18 (
 )
 
 if /i "%MODO%"=="testes" goto :TESTES
-if /i "%MODO%"=="local" goto :COPIALOCAL
+if /i "%MODO%"=="local" set "LOCALMODO=interface" & goto :COPIALOCAL
+if /i "%MODO%"=="local-completo" set "LOCALMODO=completo" & goto :COPIALOCAL
 
 REM ------------------------------------------------------------------
 REM  Dependencias
@@ -167,31 +168,49 @@ REM  Copia o projeto para uma pasta local e roda de la
 REM ------------------------------------------------------------------
 :COPIALOCAL
 set "DESTINO=%LOCALAPPDATA%\CtrLoja-dev"
-echo [2/3] Copiando o projeto para uma pasta local...
+if not defined LOCALMODO set "LOCALMODO=interface"
+
+if /i "%LOCALMODO%"=="completo" (
+  set "MARCA=.instalado-completo"
+  set "CMDINSTALL=npm install --no-audit --no-fund"
+) else (
+  set "MARCA=.instalado-interface"
+  set "CMDINSTALL=npm install --omit=optional --no-audit --no-fund"
+)
+
+echo [2/3] Sincronizando o projeto com a pasta local...
 echo       Origem : %~dp0
 echo       Destino: %DESTINO%
-echo.
-robocopy "%~dp0." "%DESTINO%" /MIR /NFL /NDL /NJH /NJS /NP ^
+
+REM  Copia apenas os arquivos alterados - rapido a partir da segunda vez
+robocopy "%~dp0." "%DESTINO%" /MIR /NFL /NDL /NJH /NJS /NP /R:1 /W:1 ^
   /XD node_modules dist .git installer\Output ^
   /XF .instalado-interface .instalado-completo *.db
 if errorlevel 8 (
   echo [ERRO] Falha ao copiar os arquivos.
   goto :FALHA
 )
-echo       Copia concluida.
+echo       Sincronizacao concluida.
 echo.
-echo [3/3] Iniciando a partir da pasta local...
-echo.
+
 pushd "%DESTINO%"
-if not exist "node_modules" (
-  echo       Instalando dependencias na pasta local...
-  call npm install --omit=optional --no-audit --no-fund
-  if errorlevel 1 (
-    popd
-    goto :FALHA
-  )
+
+if exist "node_modules" if exist "!MARCA!" goto :EXECUTARLOCAL
+
+echo       Instalando dependencias na pasta local...
+echo       ^(so na primeira vez - pode demorar alguns minutos^)
+echo.
+call !CMDINSTALL!
+if errorlevel 1 (
+  popd
+  goto :FALHA
 )
-call npx electron . --dev
+echo. > "!MARCA!"
+
+:EXECUTARLOCAL
+echo [3/3] Abrindo o CtrLoja a partir do disco local...
+echo.
+call npx electron .
 popd
 goto :FIM
 

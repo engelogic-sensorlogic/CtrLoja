@@ -26,10 +26,14 @@ echo     - Google Chrome ou Microsoft Edge instalado
 echo     - Internet no computador
 echo     - Celular com o WhatsApp da Loja por perto (leitura do QR Code)
 echo.
+echo   O projeto e copiado para o disco local antes de abrir.
+echo   Rodar de unidade de rede deixa o aplicativo MUITO lento.
+echo   Seus dados nao mudam de lugar: continuam em %%APPDATA%%\CtrLoja.
+echo.
 echo   Na primeira vez o download leva alguns minutos. Aguarde.
 echo.
 
-call "%~dp0rodar.bat" completo
+call "%~dp0rodar.bat" local-completo
 set "SAIDA=%ERRORLEVEL%"
 
 endlocal & exit /b %SAIDA%

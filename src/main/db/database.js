@@ -132,20 +132,29 @@ function semearDatas(forcar = false) {
 /* Config                                                              */
 /* ------------------------------------------------------------------ */
 
+/* As configuracoes sao lidas a cada mensagem renderizada; manter em memoria
+   evita centenas de consultas ao montar a agenda de um mes inteiro. */
+let cacheConfig = null;
+
 const config = {
   obterTodas() {
-    const linhas = getConn().prepare('SELECT chave, valor FROM config').all();
-    return Object.fromEntries(linhas.map((l) => [l.chave, l.valor]));
+    if (!cacheConfig) {
+      const linhas = getConn().prepare('SELECT chave, valor FROM config').all();
+      cacheConfig = Object.fromEntries(linhas.map((l) => [l.chave, l.valor]));
+    }
+    return { ...cacheConfig };
   },
   obter(chave, padrao = null) {
-    const l = getConn().prepare('SELECT valor FROM config WHERE chave = ?').get(chave);
-    return l ? l.valor : padrao;
+    const todas = config.obterTodas();
+    return todas[chave] !== undefined ? todas[chave] : padrao;
   },
   salvar(chave, valor) {
     getConn()
       .prepare('INSERT INTO config (chave, valor) VALUES (?, ?) ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor')
       .run(chave, valor === null || valor === undefined ? '' : String(valor));
+    cacheConfig = null;
   },
+  invalidarCache() { cacheConfig = null; },
   salvarVarias(mapa) {
     const tx = getConn().transaction(() => {
       for (const [k, v] of Object.entries(mapa || {})) config.salvar(k, v);

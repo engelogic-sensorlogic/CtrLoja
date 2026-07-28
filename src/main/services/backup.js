@@ -85,6 +85,7 @@ function importar(origem, modo = 'substituir') {
   });
 
   tx();
+  db.config.invalidarCache();
   return { arquivo: origem, modo, resumo, gerado_em: pacote.gerado_em };
 }
 

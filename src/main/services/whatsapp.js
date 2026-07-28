@@ -12,16 +12,38 @@ const fs = require('fs');
 const path = require('path');
 const db = require('../db/database');
 
+/* ------------------------------------------------------------------ */
+/* Carregamento tardio (lazy) das bibliotecas pesadas                  */
+/*                                                                     */
+/* whatsapp-web.js arrasta o puppeteer junto; carregar isso no arranque */
+/* atrasa muito a abertura do aplicativo. Aqui so verificamos se o      */
+/* pacote existe - ele so e realmente carregado ao conectar.           */
+/* ------------------------------------------------------------------ */
+
 let Client = null;
 let LocalAuth = null;
 let QRCode = null;
 
-try {
+const INSTALADO = (() => {
+  try {
+    require.resolve('whatsapp-web.js');
+    return true;
+  } catch {
+    console.log('[ctrloja] Modo interface: integração com o WhatsApp não instalada '
+      + '(use "rodar-completo.bat" para habilitar o envio real).');
+    return false;
+  }
+})();
+
+function carregarBiblioteca() {
+  if (Client) return;
+  if (!INSTALADO) {
+    throw new Error('Biblioteca whatsapp-web.js não instalada. Execute "rodar-completo.bat" na pasta do aplicativo.');
+  }
+  const t0 = Date.now();
   ({ Client, LocalAuth } = require('whatsapp-web.js'));
   QRCode = require('qrcode');
-} catch {
-  console.log('[ctrloja] Modo interface: integração com o WhatsApp não instalada '
-    + '(use "rodar.bat completo" para habilitar o envio real).');
+  console.log(`[whatsapp] Biblioteca carregada em ${Date.now() - t0} ms.`);
 }
 
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -33,6 +55,8 @@ let ultimoQr = null;
 let infoConta = null;
 let ultimoErro = null;
 let enviando = false;
+let progresso = null;          // { percent, message }
+let vigia = null;              // watchdog do evento "ready"
 
 /* ------------------------------------------------------------------ */
 
@@ -58,7 +82,8 @@ function status() {
     conta: infoConta,
     erro: ultimoErro,
     enviando,
-    disponivel: !!Client
+    progresso,
+    disponivel: INSTALADO
   };
 }
 
@@ -76,29 +101,67 @@ function localizarChrome() {
 
 /* ------------------------------------------------------------------ */
 
-async function conectar() {
-  if (!Client) throw new Error('Biblioteca whatsapp-web.js não instalada. Execute "npm install" na pasta do aplicativo.');
-  if (cliente) return status();
+function pararVigia() {
+  if (vigia) { clearTimeout(vigia); vigia = null; }
+}
+
+/** Derruba o cliente atual sem apagar a sessao gravada em disco. */
+async function encerrarCliente() {
+  pararVigia();
+  const antigo = cliente;
+  cliente = null;
+  infoConta = null;
+  ultimoQr = null;
+  progresso = null;
+  if (!antigo) return;
+  try {
+    await Promise.race([antigo.destroy(), dormir(8000)]);
+  } catch { /* ignora */ }
+}
+
+/**
+ * @param opts.reiniciar  derruba a conexao atual antes de abrir outra
+ * @param opts.visivel    abre o navegador na tela (modo diagnostico)
+ */
+async function conectar(opts = {}) {
+  carregarBiblioteca();
+
+  if (cliente) {
+    if (!opts.reiniciar) return status();
+    setEstado('iniciando');
+    emitir('carregando', { message: 'Encerrando a conexão anterior…' });
+    await encerrarCliente();
+  }
 
   fs.mkdirSync(opcoes.sessionPath, { recursive: true });
   ultimoErro = null;
+  progresso = null;
   setEstado('iniciando');
+
+  const visivel = opts.visivel === true || db.config.obter('wa_navegador_visivel', '0') === '1';
 
   cliente = new Client({
     authStrategy: new LocalAuth({ clientId: 'ctrloja', dataPath: opcoes.sessionPath }),
     puppeteer: {
-      headless: true,
+      headless: !visivel,
       executablePath: localizarChrome(),
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
-        '--disable-gpu'
+        '--disable-gpu',
+        '--no-first-run',
+        '--no-default-browser-check'
       ]
     }
   });
 
+  const meuCliente = cliente;
+  const atual = () => cliente === meuCliente;   // ignora eventos de clientes antigos
+
   cliente.on('qr', async (qr) => {
+    if (!atual()) return;
+    pararVigia();
     try {
       ultimoQr = await QRCode.toDataURL(qr, { width: 320, margin: 1 });
     } catch {
@@ -107,20 +170,31 @@ async function conectar() {
     setEstado('qr', { qr: ultimoQr });
   });
 
-  cliente.on('loading_screen', (percent, message) => emitir('carregando', { percent, message }));
+  cliente.on('loading_screen', (percent, message) => {
+    if (!atual()) return;
+    progresso = { percent, message };
+    emitir('carregando', { percent, message });
+  });
 
   cliente.on('authenticated', () => {
+    if (!atual()) return;
     ultimoQr = null;
     setEstado('autenticado');
+    armarVigia();
   });
 
   cliente.on('auth_failure', (msg) => {
+    if (!atual()) return;
+    pararVigia();
     ultimoErro = `Falha de autenticação: ${msg}`;
     setEstado('erro', { erro: ultimoErro });
   });
 
-  cliente.on('ready', async () => {
+  cliente.on('ready', () => {
+    if (!atual()) return;
+    pararVigia();
     ultimoQr = null;
+    progresso = null;
     try {
       infoConta = {
         numero: cliente.info?.wid?.user || '',
@@ -131,12 +205,16 @@ async function conectar() {
   });
 
   cliente.on('disconnected', (motivo) => {
+    if (!atual()) return;
+    pararVigia();
     infoConta = null;
     cliente = null;
     setEstado('desconectado', { motivo });
   });
 
   cliente.initialize().catch((err) => {
+    if (!atual()) return;
+    pararVigia();
     ultimoErro = err.message || String(err);
     cliente = null;
     setEstado('erro', { erro: ultimoErro });
@@ -145,21 +223,57 @@ async function conectar() {
   return status();
 }
 
+/**
+ * Se o evento "ready" nao chegar em ate 2 minutos apos a autenticacao,
+ * o carregamento travou (situacao comum quando o WhatsApp Web muda de
+ * versao ou o celular esta sem rede). Informa o usuario em vez de
+ * deixar a tela parada em "Autenticado, carregando...".
+ */
+function armarVigia() {
+  pararVigia();
+  vigia = setTimeout(() => {
+    if (estado === 'pronto' || estado === 'desconectado') return;
+    ultimoErro =
+      'O WhatsApp Web autenticou, mas não concluiu o carregamento em 2 minutos.\n\n' +
+      'O que costuma resolver:\n' +
+      '1) Confirme que o celular está com internet e o WhatsApp aberto;\n' +
+      '2) Clique em "Reiniciar conexão";\n' +
+      '3) Se continuar, use "Abrir navegador visível" para ver o que o ' +
+      'WhatsApp Web está mostrando (pode haver um aviso aguardando confirmação);\n' +
+      '4) Em último caso, use "Limpar sessão e reconectar" e leia o QR Code novamente.';
+    setEstado('erro', { erro: ultimoErro });
+  }, 120000);
+}
+
+async function reiniciar(visivel = false) {
+  return conectar({ reiniciar: true, visivel });
+}
+
+/** Encerra a sessao no WhatsApp (exige novo QR Code na proxima conexao). */
 async function desconectar() {
+  pararVigia();
   if (!cliente) { setEstado('desconectado'); return status(); }
-  try { await cliente.logout(); } catch { /* ignora */ }
-  try { await cliente.destroy(); } catch { /* ignora */ }
-  cliente = null;
-  infoConta = null;
-  ultimoQr = null;
+  try { await Promise.race([cliente.logout(), dormir(8000)]); } catch { /* ignora */ }
+  await encerrarCliente();
+  setEstado('desconectado');
+  return status();
+}
+
+/** Apaga a sessao gravada em disco - proxima conexao pedira o QR Code. */
+async function limparSessao() {
+  await encerrarCliente();
+  try {
+    fs.rmSync(opcoes.sessionPath, { recursive: true, force: true });
+  } catch (err) {
+    throw new Error(`Não foi possível apagar a sessão: ${err.message}`);
+  }
+  ultimoErro = null;
   setEstado('desconectado');
   return status();
 }
 
 async function destroy() {
-  if (!cliente) return;
-  try { await cliente.destroy(); } catch { /* ignora */ }
-  cliente = null;
+  await encerrarCliente();
 }
 
 function exigirPronto() {
@@ -401,6 +515,6 @@ async function enviarTeste(texto, destino = 'grupos') {
 }
 
 module.exports = {
-  configure, status, conectar, desconectar, destroy,
+  configure, status, conectar, reiniciar, desconectar, limparSessao, destroy,
   listarGrupos, enviarFila, enviarTeste, enviarMensagem
 };

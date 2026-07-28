@@ -30,10 +30,24 @@ App.views.whatsapp = {
       const rotulo = { desconectado: 'Desconectado', iniciando: 'Iniciando o navegador…', qr: 'Aguardando leitura do QR Code', autenticado: 'Autenticado, carregando…', pronto: 'Conectado', erro: 'Erro' }[st.estado] || st.estado;
       boxConexao.appendChild(el('p', {}, [el('strong', { text: `Estado: ${rotulo}` })]));
 
+      if (st.progresso && st.estado !== 'pronto') {
+        const p = st.progresso;
+        boxConexao.appendChild(el('p', {
+          style: 'color:var(--c-texto-suave);font-size:12.5px;margin-top:-6px',
+          text: `${p.percent !== undefined && p.percent !== null ? p.percent + '% — ' : ''}${p.message || 'carregando…'}`
+        }));
+      }
+
       if (st.conta && st.conta.numero) {
         boxConexao.appendChild(el('p', { style: 'color:var(--c-texto-suave);font-size:13px', text: `Conta: ${st.conta.nome || ''} (+${st.conta.numero})` }));
       }
-      if (st.erro) boxConexao.appendChild(el('div', { class: 'aviso', text: st.erro }));
+      if (st.erro) {
+        boxConexao.appendChild(el('div', {
+          class: 'aviso',
+          style: 'white-space:pre-wrap',
+          text: st.erro
+        }));
+      }
 
       if (st.estado === 'qr' && st.qr) {
         boxConexao.appendChild(el('div', { class: 'qr-area' }, [
@@ -72,16 +86,49 @@ App.views.whatsapp = {
           }
         }));
       } else {
+        const ocioso = st.estado === 'desconectado' || st.estado === 'erro';
+
         acoes.appendChild(el('button', {
-          class: 'btn', text: st.estado === 'desconectado' || st.estado === 'erro' ? 'Conectar WhatsApp' : 'Reiniciar conexão',
+          class: 'btn', text: ocioso ? 'Conectar WhatsApp' : 'Reiniciar conexão',
+          onclick: async (ev) => {
+            const btn = ev.currentTarget;
+            btn.disabled = true;
+            btn.textContent = ocioso ? 'Conectando…' : 'Reiniciando…';
+            toast(ocioso ? 'Iniciando conexão…' : 'Encerrando a conexão anterior e reabrindo…', '', 6000);
+            if (ocioso) await tentar(window.api.whatsapp.conectar(), 'Falha ao conectar');
+            else await tentar(window.api.whatsapp.reiniciar(false), 'Falha ao reiniciar');
+            pintarConexao();
+          }
+        }));
+
+        acoes.appendChild(el('button', {
+          class: 'btn secundario', text: '🔍 Abrir navegador visível',
           onclick: async () => {
-            toast('Iniciando conexão… isso pode levar alguns segundos.');
+            toast('Abrindo o WhatsApp Web em janela visível para diagnóstico…', '', 8000);
+            await tentar(window.api.whatsapp.reiniciar(true), 'Falha ao abrir em modo diagnóstico');
+            pintarConexao();
+          }
+        }));
+
+        acoes.appendChild(el('button', {
+          class: 'btn perigo', text: 'Limpar sessão e reconectar',
+          onclick: async () => {
+            if (!await confirmar('A sessão salva será apagada e será necessário ler o QR Code novamente. Continuar?')) return;
+            await tentar(window.api.whatsapp.limparSessao(), 'Falha ao limpar a sessão');
             await tentar(window.api.whatsapp.conectar(), 'Falha ao conectar');
             pintarConexao();
           }
         }));
       }
       boxConexao.appendChild(acoes);
+
+      if (st.estado === 'autenticado' || st.estado === 'iniciando') {
+        boxConexao.appendChild(el('div', {
+          class: 'aviso', style: 'margin-top:12px',
+          html: 'O primeiro carregamento após a leitura do QR Code costuma levar de 30 segundos a 2 minutos, '
+            + 'pois o WhatsApp sincroniza as conversas. Se passar disso, o CtrLoja avisa automaticamente.'
+        }));
+      }
 
       boxConexao.appendChild(el('div', {
         class: 'aviso info', style: 'margin-top:14px',

@@ -22,11 +22,29 @@ const ROTULO_CATEGORIA = {
 
 /* ------------------------------------------------------------------ */
 
-function eventosDoDia(isoData) {
+/**
+ * Carrega uma unica vez os dados usados na varredura de datas.
+ * Sem isto, um periodo de 30 dias releria o banco 30 vezes.
+ */
+function carregarBase() {
+  return {
+    obreiros: db.obreiros.listar({ somenteAtivos: true }),
+    datas: db.datas.ativas(),
+    titulos: {
+      obreiro: tpl.tituloDe('obreiro'),
+      cunhada: tpl.tituloDe('cunhada'),
+      sobrinho: tpl.tituloDe('sobrinho'),
+      sobrinha: tpl.tituloDe('sobrinha')
+    }
+  };
+}
+
+function eventosDoDia(isoData, base) {
   const data = cal.ehISOValido(isoData) ? isoData : cal.hojeISO();
   const eventos = [];
 
-  const obreiros = db.obreiros.listar({ somenteAtivos: true });
+  if (!base) base = carregarBase();
+  const { obreiros, titulos } = base;
 
   for (const o of obreiros) {
     const falecido = String(o.situacao || '').toLowerCase() === 'falecido';
@@ -44,10 +62,10 @@ function eventosDoDia(isoData) {
         data_original: dataOriginal,
         anos: cal.anosDecorridos(dataOriginal, data),
         nome: o.nome,
-        titulo_pessoa: o.tratamento || tpl.tituloDe('obreiro'),
+        titulo_pessoa: o.tratamento || titulos.obreiro,
         obreiro_id: o.id,
         obreiro_nome: o.nome,
-        obreiro_titulo: o.tratamento || tpl.tituloDe('obreiro'),
+        obreiro_titulo: o.tratamento || titulos.obreiro,
         conjuge: cunhada ? cunhada.nome : '',
         celular: o.celular || '',
         bloqueado: falecido,
@@ -68,10 +86,10 @@ function eventosDoDia(isoData) {
         data_original: f.dt_nascimento,
         anos: cal.anosDecorridos(f.dt_nascimento, data),
         nome: f.nome,
-        titulo_pessoa: tpl.tituloDe(f.parentesco),
+        titulo_pessoa: titulos[f.parentesco] || '',
         obreiro_id: o.id,
         obreiro_nome: o.nome,
-        obreiro_titulo: o.tratamento || tpl.tituloDe('obreiro'),
+        obreiro_titulo: o.tratamento || titulos.obreiro,
         celular: f.celular || '',
         bloqueado: false
       });
@@ -80,7 +98,7 @@ function eventosDoDia(isoData) {
 
   // Calendario permanente
   const { ano } = cal.partes(data);
-  for (const d of db.datas.ativas()) {
+  for (const d of base.datas) {
     const iso = cal.resolverDataCalendario(d, ano);
     if (iso !== data) continue;
     eventos.push({
@@ -108,10 +126,11 @@ function eventosDoDia(isoData) {
 
 function eventosDoPeriodo(isoInicio, isoFim) {
   const res = [];
+  const base = carregarBase();
   let atual = isoInicio;
   let guarda = 0;
   while (atual <= isoFim && guarda < 800) {
-    const evts = eventosDoDia(atual);
+    const evts = eventosDoDia(atual, base);
     if (evts.length) res.push({ data: atual, eventos: evts });
     atual = cal.somarDias(atual, 1);
     guarda += 1;
@@ -188,5 +207,5 @@ function montarFila(isoData) {
 }
 
 module.exports = {
-  eventosDoDia, eventosDoPeriodo, eventosDoMes, proximosEventos, montarFila, TIPOS_OBREIRO
+  carregarBase, eventosDoDia, eventosDoPeriodo, eventosDoMes, proximosEventos, montarFila, TIPOS_OBREIRO
 };
