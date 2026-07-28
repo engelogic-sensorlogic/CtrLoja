@@ -54,7 +54,8 @@ Basta dar dois cliques no **`rodar.bat`**:
 | Comando | O que faz |
 |---------|-----------|
 | `rodar.bat` | **Modo interface** (padrão, rápido). Instala só o essencial — sem compilar módulo nativo e sem baixar o Chromium. Interface, banco, agenda, calendário e modelos funcionam; o envio pelo WhatsApp fica indisponível. |
-| `rodar.bat completo` | Instala tudo, inclusive a integração com o WhatsApp (download maior na primeira vez). |
+| **`rodar-completo.bat`** | **Modo completo** com a integração do WhatsApp. Atalho de duplo clique (equivale a `rodar.bat completo`). |
+| `rodar.bat local` | Copia o projeto para uma pasta local e roda de lá. Use quando o projeto estiver em unidade de rede/mapeada. |
 | `rodar.bat testes` | Executa apenas os testes automatizados. |
 
 No modo interface o aplicativo usa o **SQLite embutido no Electron** (`node:sqlite`), portanto

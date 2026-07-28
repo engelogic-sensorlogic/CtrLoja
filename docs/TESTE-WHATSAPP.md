@@ -21,11 +21,13 @@ CtrLoja — A∴R∴L∴S∴ União Fraternal Rolandense nº 141
 
 ## Etapa 1 — Instalar o modo completo
 
-Feche o CtrLoja e execute na pasta do projeto:
+Feche o CtrLoja e dê **duplo clique** em:
 
-```bat
-rodar.bat completo
 ```
+rodar-completo.bat
+```
+
+(equivale a `rodar.bat completo` no prompt)
 
 A primeira execução baixa a biblioteca de integração (alguns minutos). Nas próximas vezes é imediato.
 
