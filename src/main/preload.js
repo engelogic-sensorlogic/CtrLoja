@@ -60,7 +60,7 @@ contextBridge.exposeInMainWorld('api', {
     gruposSalvos: () => call('whatsapp:grupos-salvos'),
     salvarGrupos: (lista) => call('whatsapp:salvar-grupos', lista),
     enviar: (payload) => call('whatsapp:enviar', payload),
-    teste: (texto) => call('whatsapp:teste', texto)
+    teste: (texto, destino) => call('whatsapp:teste', texto, destino)
   },
 
   log: {

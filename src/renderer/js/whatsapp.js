@@ -49,9 +49,17 @@ App.views.whatsapp = {
           onclick: async () => { await carregarGrupos(true); }
         }));
         acoes.appendChild(el('button', {
-          class: 'btn secundario', text: 'Enviar mensagem de teste',
+          class: 'btn sucesso', text: '🧪 Teste para mim mesmo',
           onclick: async () => {
-            const res = await tentar(window.api.whatsapp.teste(), 'Falha no teste');
+            const res = await tentar(window.api.whatsapp.teste(null, 'eu'), 'Falha no teste');
+            if (res) toast('Teste enviado para o seu próprio WhatsApp. Confira a conversa com você mesmo.', 'ok', 7000);
+          }
+        }));
+        acoes.appendChild(el('button', {
+          class: 'btn secundario', text: 'Teste nos grupos selecionados',
+          onclick: async () => {
+            if (!await confirmar('Isto envia uma mensagem de teste REAL nos grupos selecionados. Confirma?')) return;
+            const res = await tentar(window.api.whatsapp.teste(null, 'grupos'), 'Falha no teste');
             if (res) toast(`Teste enviado para ${res.enviados} grupo(s).`, 'ok');
           }
         }));

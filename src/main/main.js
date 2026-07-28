@@ -217,7 +217,7 @@ handle('whatsapp:grupos', () => whatsapp.listarGrupos());
 handle('whatsapp:grupos-salvos', () => db.grupos.listar());
 handle('whatsapp:salvar-grupos', (lista) => db.grupos.salvarSelecao(lista));
 handle('whatsapp:enviar', (payload) => whatsapp.enviarFila(payload));
-handle('whatsapp:teste', (texto) => whatsapp.enviarTeste(texto));
+handle('whatsapp:teste', (texto, destino) => whatsapp.enviarTeste(texto, destino));
 
 /* ------------------------------------------------------------------ */
 /* IPC - Log de envios                                                 */

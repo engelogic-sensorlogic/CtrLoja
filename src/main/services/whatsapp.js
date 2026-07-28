@@ -258,16 +258,35 @@ async function enviarFila(payload = {}) {
   return { enviados, falhas, destinos: destinos.length };
 }
 
-async function enviarTeste(texto) {
+/**
+ * Envia uma mensagem de teste.
+ * @param texto   conteudo (opcional)
+ * @param destino 'eu' = envia para o proprio numero conectado (mais seguro)
+ *                'grupos' = envia para os grupos selecionados
+ */
+async function enviarTeste(texto, destino = 'grupos') {
   exigirPronto();
+
+  const msg = texto || (
+    '✅ *CtrLoja* — mensagem de teste.\n\n' +
+    'A integração com o WhatsApp está funcionando corretamente.\n\n' +
+    '_A∴R∴L∴S∴ União Fraternal Rolandense nº 141_'
+  );
+
+  if (destino === 'eu') {
+    const proprio = cliente.info?.wid?._serialized;
+    if (!proprio) throw new Error('Não foi possível identificar o número conectado.');
+    await enviarMensagem(proprio, msg);
+    return { enviados: 1, destino: 'você mesmo' };
+  }
+
   const destinos = db.grupos.selecionados().map((g) => g.wa_id);
   if (!destinos.length) throw new Error('Selecione ao menos um grupo antes de enviar o teste.');
-  const msg = texto || '✅ *CtrLoja* — mensagem de teste. A integração com o WhatsApp está funcionando.';
   for (const d of destinos) {
     await enviarMensagem(d, msg);
     await dormir(1500);
   }
-  return { enviados: destinos.length };
+  return { enviados: destinos.length, destino: `${destinos.length} grupo(s)` };
 }
 
 module.exports = {
