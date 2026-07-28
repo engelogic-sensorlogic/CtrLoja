@@ -32,19 +32,28 @@ if /i "%ACAO%"=="setup"  goto :INSTALADOR
 REM ------------------------------------------------------------------
 REM  1. Verificacao do ambiente
 REM ------------------------------------------------------------------
+set "NODEDIR="
 where node >nul 2>&1
-if errorlevel 1 (
-  echo [ERRO] Node.js nao encontrado no PATH.
-  echo        Instale a versao LTS em https://nodejs.org
-  goto :FALHA
-)
-where npm >nul 2>&1
-if errorlevel 1 (
-  echo [ERRO] npm nao encontrado no PATH.
-  goto :FALHA
-)
+if not errorlevel 1 goto :NODE_OK
 
-for /f "tokens=*" %%v in ('node -v') do set "NODEV=%%v"
+call :ACHARNODE "%ProgramFiles%\nodejs"
+call :ACHARNODE "%ProgramW6432%\nodejs"
+call :ACHARNODE "%SystemDrive%\Program Files (x86)\nodejs"
+call :ACHARNODE "%LOCALAPPDATA%\Programs\nodejs"
+call :ACHARNODE "%ProgramData%\chocolatey\lib\nodejs\tools"
+call :ACHARNODE "%USERPROFILE%\scoop\apps\nodejs\current"
+call :ACHARNODE "%NVM_SYMLINK%"
+
+if not defined NODEDIR (
+  echo [ERRO] Node.js nao encontrado neste computador.
+  echo        Instale a versao LTS em https://nodejs.org
+  echo        ou execute:  winget install OpenJS.NodeJS.LTS
+  goto :FALHA
+)
+set "PATH=%NODEDIR%;%PATH%"
+
+:NODE_OK
+for /f "tokens=*" %%v in ('node -v 2^>nul') do set "NODEV=%%v"
 echo [1/5] Node.js !NODEV! encontrado.
 
 REM ------------------------------------------------------------------
@@ -142,6 +151,13 @@ echo   Instalador : installer\Output\CtrLoja-Setup-*.exe
 echo.
 goto :FIM
 
+:ACHARNODE
+if defined NODEDIR exit /b 0
+if "%~1"=="" exit /b 0
+if exist "%~1\node.exe" set "NODEDIR=%~1"
+exit /b 0
+
+REM ------------------------------------------------------------------
 :FALHA
 echo.
 echo ===================================================================

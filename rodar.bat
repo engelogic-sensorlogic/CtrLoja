@@ -34,16 +34,75 @@ echo ===================================================================
 echo.
 
 REM ------------------------------------------------------------------
-REM  Ambiente
+REM  Ambiente - procura o Node.js no PATH e nos locais mais comuns
 REM ------------------------------------------------------------------
+set "NODEDIR="
+
 where node >nul 2>&1
-if errorlevel 1 (
-  echo [ERRO] Node.js nao encontrado.
-  echo        Baixe a versao LTS em https://nodejs.org e reinicie o prompt.
+if not errorlevel 1 goto :NODE_OK
+
+echo [1/3] Node.js nao esta no PATH. Procurando nas pastas usuais...
+
+call :ACHAR "%ProgramFiles%\nodejs"
+call :ACHAR "%ProgramW6432%\nodejs"
+call :ACHAR "%SystemDrive%\Program Files (x86)\nodejs"
+call :ACHAR "%LOCALAPPDATA%\Programs\nodejs"
+call :ACHAR "%LOCALAPPDATA%\Programs\node"
+call :ACHAR "%ProgramData%\chocolatey\lib\nodejs\tools"
+call :ACHAR "%USERPROFILE%\scoop\apps\nodejs\current"
+call :ACHAR "%NVM_SYMLINK%"
+
+REM  nvm-windows: pega a versao mais recente instalada
+if not defined NODEDIR if exist "%ProgramData%\nvm" (
+  for /d %%V in ("%ProgramData%\nvm\v*") do call :ACHAR "%%~V"
+)
+if not defined NODEDIR if exist "%APPDATA%\nvm" (
+  for /d %%V in ("%APPDATA%\nvm\v*") do call :ACHAR "%%~V"
+)
+
+if not defined NODEDIR (
+  echo.
+  echo ===================================================================
+  echo   [ERRO] Node.js nao esta instalado neste computador.
+  echo ===================================================================
+  echo.
+  echo   O CtrLoja precisa do Node.js para rodar a partir do codigo-fonte.
+  echo.
+  echo   COMO RESOLVER:
+  echo     1^) Acesse  https://nodejs.org
+  echo     2^) Baixe a versao *LTS* para Windows ^(instalador .msi de 64 bits^)
+  echo     3^) Instale aceitando todas as opcoes padrao
+  echo        ^(deixe marcada a opcao "Add to PATH"^)
+  echo     4^) FECHE esta janela e execute o rodar.bat novamente
+  echo.
+  where winget >nul 2>&1
+  if not errorlevel 1 (
+    echo   Este computador possui o winget: posso instalar automaticamente.
+    echo.
+    set /p "RESP=   Instalar o Node.js LTS agora? [S/N] "
+    if /i "!RESP!"=="S" goto :INSTALARNODE
+  )
   goto :FALHA
 )
-for /f "tokens=*" %%v in ('node -v') do set "NODEV=%%v"
+
+set "PATH=%NODEDIR%;%PATH%"
+echo       Node.js localizado em: %NODEDIR%
+
+:NODE_OK
+for /f "tokens=*" %%v in ('node -v 2^>nul') do set "NODEV=%%v"
+if not defined NODEV (
+  echo [ERRO] Node.js encontrado, mas nao executou corretamente.
+  goto :FALHA
+)
 echo [1/3] Node.js !NODEV!
+
+REM  Aviso de versao antiga: o modo interface exige Node/Electron recente
+set "NODEMAJOR=!NODEV:v=!"
+for /f "tokens=1 delims=." %%m in ("!NODEMAJOR!") do set "NODEMAJOR=%%m"
+if !NODEMAJOR! LSS 18 (
+  echo       [AVISO] Versao antiga do Node.js detectada.
+  echo               Recomendado: Node.js 20 LTS ou superior.
+)
 
 if /i "%MODO%"=="testes" goto :TESTES
 
@@ -108,6 +167,35 @@ if errorlevel 1 goto :FALHA
 echo.
 echo [3/3] Todos os testes passaram.
 goto :FIM
+
+REM ------------------------------------------------------------------
+REM ------------------------------------------------------------------
+REM  Instalacao assistida do Node.js via winget
+REM ------------------------------------------------------------------
+:INSTALARNODE
+echo.
+echo   Instalando o Node.js LTS ^(aceite o prompt do Windows, se aparecer^)...
+echo.
+winget install --id OpenJS.NodeJS.LTS -e --accept-source-agreements --accept-package-agreements
+echo.
+echo ===================================================================
+echo   Instalacao finalizada.
+echo   FECHE esta janela e execute o rodar.bat novamente para que o
+echo   Windows reconheca o Node.js no PATH.
+echo ===================================================================
+echo.
+pause
+endlocal
+exit /b 0
+
+REM ------------------------------------------------------------------
+REM  Sub-rotina: registra a pasta se houver node.exe dentro dela
+REM ------------------------------------------------------------------
+:ACHAR
+if defined NODEDIR exit /b 0
+if "%~1"=="" exit /b 0
+if exist "%~1\node.exe" set "NODEDIR=%~1"
+exit /b 0
 
 REM ------------------------------------------------------------------
 :FALHA
