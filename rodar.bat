@@ -18,6 +18,11 @@ REM    rodar.bat completo     -> MODO COMPLETO
 REM                              instala tudo, inclusive a integracao com
 REM                              o WhatsApp (download maior na 1a vez).
 REM
+REM    rodar.bat local        -> COPIA o projeto para uma pasta local do
+REM                              usuario e roda de la. Use quando o projeto
+REM                              estiver em unidade de rede/mapeada e o
+REM                              Electron reclamar do processo de GPU.
+REM
 REM    rodar.bat testes       -> roda apenas os testes automatizados
 REM ===================================================================
 
@@ -105,6 +110,7 @@ if !NODEMAJOR! LSS 18 (
 )
 
 if /i "%MODO%"=="testes" goto :TESTES
+if /i "%MODO%"=="local" goto :COPIALOCAL
 
 REM ------------------------------------------------------------------
 REM  Dependencias
@@ -154,6 +160,39 @@ if /i "%MODO%"=="completo" (
 ) else (
   call npx electron . --dev
 )
+goto :FIM
+
+REM ------------------------------------------------------------------
+REM  Copia o projeto para uma pasta local e roda de la
+REM ------------------------------------------------------------------
+:COPIALOCAL
+set "DESTINO=%LOCALAPPDATA%\CtrLoja-dev"
+echo [2/3] Copiando o projeto para uma pasta local...
+echo       Origem : %~dp0
+echo       Destino: %DESTINO%
+echo.
+robocopy "%~dp0." "%DESTINO%" /MIR /NFL /NDL /NJH /NJS /NP ^
+  /XD node_modules dist .git installer\Output ^
+  /XF .instalado-interface .instalado-completo *.db
+if errorlevel 8 (
+  echo [ERRO] Falha ao copiar os arquivos.
+  goto :FALHA
+)
+echo       Copia concluida.
+echo.
+echo [3/3] Iniciando a partir da pasta local...
+echo.
+pushd "%DESTINO%"
+if not exist "node_modules" (
+  echo       Instalando dependencias na pasta local...
+  call npm install --omit=optional --no-audit --no-fund
+  if errorlevel 1 (
+    popd
+    goto :FALHA
+  )
+)
+call npx electron . --dev
+popd
 goto :FIM
 
 REM ------------------------------------------------------------------

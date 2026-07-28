@@ -15,6 +15,35 @@ const isDev = process.argv.includes('--dev');
 let mainWindow = null;
 
 /* ------------------------------------------------------------------ */
+/* Compatibilidade: execucao a partir de unidade de rede / mapeada     */
+/*                                                                     */
+/* Quando o aplicativo roda de um caminho UNC (\\servidor\...) ou de   */
+/* uma unidade mapeada (Z:\, Y:\...), o processo de GPU do Chromium    */
+/* nao consegue iniciar e o Electron aborta com:                       */
+/*   "GPU process launch failed: error_code=18"                        */
+/*   "GPU process isn't usable. Goodbye."                              */
+/* Desligar a aceleracao por hardware e o sandbox resolve.             */
+/* ------------------------------------------------------------------ */
+
+function caminhoArriscado() {
+  const p = app.getAppPath();
+  if (/^\\\\/.test(p)) return true;                    // UNC
+  const unidade = (p.match(/^([A-Za-z]):/) || [])[1];
+  if (!unidade) return false;
+  return unidade.toUpperCase() !== 'C';                // qualquer unidade fora de C:
+}
+
+if (process.platform === 'win32' &&
+    (process.argv.includes('--sem-gpu') || caminhoArriscado())) {
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch('no-sandbox');
+  app.commandLine.appendSwitch('disable-gpu');
+  app.commandLine.appendSwitch('disable-gpu-sandbox');
+  app.commandLine.appendSwitch('disable-software-rasterizer');
+  console.log('[ctrloja] Modo compatibilidade gráfica ativado (unidade de rede/mapeada).');
+}
+
+/* ------------------------------------------------------------------ */
 /* Janela principal                                                    */
 /* ------------------------------------------------------------------ */
 

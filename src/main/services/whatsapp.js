@@ -19,8 +19,9 @@ let QRCode = null;
 try {
   ({ Client, LocalAuth } = require('whatsapp-web.js'));
   QRCode = require('qrcode');
-} catch (err) {
-  console.warn('[whatsapp] Dependencias ainda nao instaladas:', err.message);
+} catch {
+  console.log('[ctrloja] Modo interface: integração com o WhatsApp não instalada '
+    + '(use "rodar.bat completo" para habilitar o envio real).');
 }
 
 let cliente = null;
