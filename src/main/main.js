@@ -212,7 +212,7 @@ handle('config:salvar', (mapa) => {
 
 handle('whatsapp:status', () => whatsapp.status());
 handle('whatsapp:conectar', (opts) => whatsapp.conectar(opts));
-handle('whatsapp:reiniciar', (visivel) => whatsapp.reiniciar(visivel));
+handle('whatsapp:reiniciar', () => whatsapp.reiniciar());
 handle('whatsapp:desconectar', () => whatsapp.desconectar());
 handle('whatsapp:limpar-sessao', () => whatsapp.limparSessao());
 handle('whatsapp:diagnostico', () => whatsapp.diagnostico());

@@ -29,8 +29,10 @@ e a terminologia maçônica correta (Ir∴, Cunhada, Sobrinho, Sobrinha).
 
 A **WhatsApp Cloud API** (oficial, da Meta) **não permite enviar mensagens para grupos** — apenas para
 contatos individuais que iniciaram conversa. Como o requisito do CtrLoja é publicar nos grupos da Loja,
-o aplicativo automatiza o **WhatsApp Web** através da biblioteca `whatsapp-web.js`, com sessão
-persistente em disco: o QR Code é lido **uma única vez**.
+o aplicativo usa o **Baileys**, que fala o protocolo multi-device do WhatsApp diretamente por
+WebSocket — o mesmo mecanismo dos aparelhos conectados. Não abre navegador, não depende do
+Chrome e não quebra quando o WhatsApp Web muda de versão. A sessão fica persistente em disco:
+o QR Code é lido **uma única vez**.
 
 > O celular pareado precisa permanecer com acesso à internet.
 
@@ -42,7 +44,6 @@ persistente em disco: o QR Code é lido **uma única vez**.
 |------|--------|
 | Windows | 10 ou 11 (x64) |
 | Node.js | 20 LTS ou superior (apenas para compilar) |
-| Google Chrome ou Microsoft Edge | instalado (usado pela automação do WhatsApp Web) |
 | Inno Setup | 7.x (apenas para gerar o instalador) |
 
 ---
@@ -123,7 +124,7 @@ CtrLoja/
    │     ├─ calendario.js       Cálculo de datas (Páscoa, datas móveis, idades)
    │     ├─ agenda.js           Motor de eventos e montagem da fila do dia
    │     ├─ templates.js        Renderização das mensagens
-   │     ├─ whatsapp.js         Integração whatsapp-web.js
+   │     ├─ whatsapp.js         Integração Baileys (protocolo multi-device)
    │     ├─ scheduler.js        Rotina diária (node-cron)
    │     └─ backup.js           Exportação / importação do banco
    └─ renderer/                 Interface (HTML/CSS/JS)

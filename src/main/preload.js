@@ -55,7 +55,7 @@ contextBridge.exposeInMainWorld('api', {
   whatsapp: {
     status: () => call('whatsapp:status'),
     conectar: (opts) => call('whatsapp:conectar', opts),
-    reiniciar: (visivel) => call('whatsapp:reiniciar', visivel),
+    reiniciar: () => call('whatsapp:reiniciar'),
     desconectar: () => call('whatsapp:desconectar'),
     limparSessao: () => call('whatsapp:limpar-sessao'),
     diagnostico: () => call('whatsapp:diagnostico'),

@@ -1,32 +1,38 @@
 'use strict';
 
 /**
- * Integracao com o WhatsApp via whatsapp-web.js.
+ * Integracao com o WhatsApp via Baileys.
  *
- * IMPORTANTE: a API oficial (WhatsApp Cloud API) nao permite enviar mensagens
- * para GRUPOS. Por isso o CtrLoja utiliza a automacao do WhatsApp Web, com
- * sessao persistente em disco (LocalAuth) - o QR Code e lido uma unica vez.
+ * Por que Baileys e nao a API oficial:
+ *   a WhatsApp Cloud API (oficial, da Meta) NAO permite enviar mensagens para
+ *   GRUPOS - apenas para contatos individuais que iniciaram a conversa. Como o
+ *   CtrLoja precisa publicar nos grupos da Loja, usamos o protocolo multi-device.
+ *
+ * Por que Baileys e nao whatsapp-web.js:
+ *   o whatsapp-web.js automatiza a pagina web dentro de um Chrome controlado.
+ *   Alem de pesado (puppeteer + Chromium), quebra a cada mudanca interna do
+ *   WhatsApp Web. O Baileys fala o protocolo direto por WebSocket: sem
+ *   navegador, sem pagina, arranque rapido e muito mais estavel.
+ *
+ * A sessao (credenciais) fica em disco; o QR Code e lido uma unica vez.
  */
 
 const fs = require('fs');
 const path = require('path');
 const db = require('../db/database');
 
+const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+
 /* ------------------------------------------------------------------ */
-/* Carregamento tardio (lazy) das bibliotecas pesadas                  */
-/*                                                                     */
-/* whatsapp-web.js arrasta o puppeteer junto; carregar isso no arranque */
-/* atrasa muito a abertura do aplicativo. Aqui so verificamos se o      */
-/* pacote existe - ele so e realmente carregado ao conectar.           */
+/* Carregamento tardio das bibliotecas                                 */
 /* ------------------------------------------------------------------ */
 
-let Client = null;
-let LocalAuth = null;
+let BLY = null;      // modulo Baileys
 let QRCode = null;
 
 const INSTALADO = (() => {
   try {
-    require.resolve('whatsapp-web.js');
+    require.resolve('baileys');
     return true;
   } catch {
     console.log('[ctrloja] Modo interface: integração com o WhatsApp não instalada '
@@ -35,30 +41,45 @@ const INSTALADO = (() => {
   }
 })();
 
-function carregarBiblioteca() {
-  if (Client) return;
+/** Baileys 7 e um modulo ESM: precisa de import() dinamico a partir do CommonJS. */
+async function carregarBiblioteca() {
+  if (BLY) return BLY;
   if (!INSTALADO) {
-    throw new Error('Biblioteca whatsapp-web.js não instalada. Execute "rodar-completo.bat" na pasta do aplicativo.');
+    throw new Error('Biblioteca "baileys" não instalada. Execute "rodar-completo.bat" na pasta do aplicativo.');
   }
   const t0 = Date.now();
-  ({ Client, LocalAuth } = require('whatsapp-web.js'));
+  BLY = await import('baileys');
   QRCode = require('qrcode');
-  console.log(`[whatsapp] Biblioteca carregada em ${Date.now() - t0} ms.`);
+  console.log(`[whatsapp] Baileys carregado em ${Date.now() - t0} ms.`);
+  return BLY;
 }
 
-const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+/** Logger silencioso no formato esperado pelo Baileys. */
+function criarLogger() {
+  const vazio = () => {};
+  const base = {
+    level: 'silent',
+    trace: vazio, debug: vazio, info: vazio, warn: vazio, error: vazio, fatal: vazio
+  };
+  base.child = () => base;
+  return base;
+}
 
-let cliente = null;
+/* ------------------------------------------------------------------ */
+/* Estado                                                              */
+/* ------------------------------------------------------------------ */
+
+let sock = null;
 let opcoes = { sessionPath: null, onEvent: () => {} };
-let estado = 'desconectado';   // desconectado | iniciando | qr | autenticado | pronto | erro
+let estado = 'desconectado';   // desconectado | iniciando | qr | conectando | pronto | erro
 let ultimoQr = null;
 let infoConta = null;
 let ultimoErro = null;
 let enviando = false;
-let progresso = null;          // { percent, message }
-let vigia = null;              // watchdog do evento "ready"
-
-/* ------------------------------------------------------------------ */
+let progresso = null;
+let conectando = false;
+let encerrandoDeProposito = false;
+let tentativasReconexao = 0;
 
 function configure(cfg) {
   opcoes = { ...opcoes, ...cfg };
@@ -83,428 +104,255 @@ function status() {
     erro: ultimoErro,
     enviando,
     progresso,
-    disponivel: INSTALADO
+    disponivel: INSTALADO,
+    motor: 'baileys'
   };
 }
 
-function localizarChrome() {
-  const cfgPath = db.config.obter('chrome_path', '');
-  if (cfgPath && fs.existsSync(cfgPath)) return cfgPath;
-  const candidatos = [
-    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe'
-  ];
-  return candidatos.find((p) => fs.existsSync(p)) || undefined;
-}
-
+/* ------------------------------------------------------------------ */
+/* Conexao                                                             */
 /* ------------------------------------------------------------------ */
 
-function pararVigia() {
-  if (vigia) { clearTimeout(vigia); vigia = null; }
-}
-
-/**
- * Derruba o cliente atual sem apagar a sessao gravada em disco.
- *
- * O destroy() da biblioteca as vezes trava; se isso acontecer, o processo do
- * Chrome continua vivo segurando a pasta de perfil. A instancia seguinte nao
- * consegue reaproveitar a sessao e cai na tela de login - foi exatamente esse
- * o sintoma de "app conectado, navegador pedindo QR Code". Por isso, aqui o
- * processo do navegador e encerrado a forca quando necessario.
- */
-async function encerrarCliente() {
-  pararVigia();
-  const antigo = cliente;
-  cliente = null;
+async function encerrarSocket() {
+  const antigo = sock;
+  sock = null;
   infoConta = null;
   ultimoQr = null;
   progresso = null;
   if (!antigo) return;
-
-  const navegador = antigo.pupBrowser;
-
+  encerrandoDeProposito = true;
   try {
-    await Promise.race([antigo.destroy(), dormir(6000)]);
+    antigo.ev.removeAllListeners?.('connection.update');
+    antigo.ev.removeAllListeners?.('creds.update');
   } catch { /* ignora */ }
-
-  // Garantia: fecha o navegador e mata o processo se ainda estiver de pe
   try {
-    if (navegador) {
-      const proc = typeof navegador.process === 'function' ? navegador.process() : null;
-      try { await Promise.race([navegador.close(), dormir(4000)]); } catch { /* ignora */ }
-      if (proc && proc.exitCode === null && !proc.killed) {
-        proc.kill('SIGKILL');
-        console.log('[whatsapp] Processo do navegador encerrado à força.');
-      }
-    }
-  } catch (err) {
-    console.warn('[whatsapp] Falha ao encerrar o navegador:', err.message);
-  }
-
-  await dormir(800);   // dá tempo do Windows liberar a pasta de perfil
+    antigo.end?.(new Error('Encerrado pelo CtrLoja'));
+  } catch { /* ignora */ }
+  await dormir(300);
+  encerrandoDeProposito = false;
 }
 
 /**
- * Consulta a pagina real do WhatsApp Web.
- * Serve para saber se a sessao continua valida - o estado interno pode
- * dizer "pronto" enquanto a pagina ja voltou para a tela de login.
- */
-async function inspecionarPagina() {
-  if (!cliente || !cliente.pupPage) return { disponivel: false };
-  try {
-    const dados = await cliente.pupPage.evaluate(() => {
-      const temQr = !!document.querySelector(
-        'canvas[aria-label*="scan" i], canvas[aria-label*="escane" i], [data-testid="qrcode"], [data-ref]'
-      );
-      const store = window.Store || null;
-      let chats = null;
-      try {
-        if (store && store.Chat && typeof store.Chat.getModelsArray === 'function') {
-          chats = store.Chat.getModelsArray().length;
-        }
-      } catch { chats = null; }
-      return {
-        url: location.href,
-        titulo: document.title,
-        telaDeLogin: temQr,
-        temStore: !!store,
-        temWWebJS: typeof window.WWebJS !== 'undefined',
-        qtdChats: chats,
-        versaoWhatsApp: (window.Debug && window.Debug.VERSION) || null
-      };
-    });
-    return { disponivel: true, ...dados };
-  } catch (err) {
-    return { disponivel: false, erro: err.message || String(err) };
-  }
-}
-
-/** Relatorio tecnico para a tela de diagnostico. */
-async function diagnostico() {
-  const pagina = await inspecionarPagina();
-  let versaoLib = null;
-  try { versaoLib = require('whatsapp-web.js/package.json').version; } catch { /* ignora */ }
-  return {
-    estado,
-    conta: infoConta,
-    temCliente: !!cliente,
-    versaoBiblioteca: versaoLib,
-    navegador: localizarChrome() || '(Chromium interno do puppeteer)',
-    sessao: opcoes.sessionPath,
-    pagina
-  };
-}
-
-/**
- * @param opts.reiniciar  derruba a conexao atual antes de abrir outra
- * @param opts.visivel    abre o navegador na tela (modo diagnostico)
+ * @param opts.reiniciar   derruba a conexao atual antes de abrir outra
+ * @param opts.silencioso  nao troca o estado para "iniciando" (uso interno)
  */
 async function conectar(opts = {}) {
-  carregarBiblioteca();
+  const bly = await carregarBiblioteca();
 
-  if (cliente) {
-    if (!opts.reiniciar) return status();
+  if (sock && !opts.reiniciar) return status();
+  if (conectando && !opts.reiniciar) return status();
+
+  if (sock) {
     setEstado('iniciando');
     emitir('carregando', { message: 'Encerrando a conexão anterior…' });
-    await encerrarCliente();
+    await encerrarSocket();
   }
 
-  fs.mkdirSync(opcoes.sessionPath, { recursive: true });
+  conectando = true;
   ultimoErro = null;
   progresso = null;
-  setEstado('iniciando');
+  if (!opts.silencioso) setEstado('iniciando');
 
-  const visivel = opts.visivel === true || db.config.obter('wa_navegador_visivel', '0') === '1';
+  try {
+    fs.mkdirSync(opcoes.sessionPath, { recursive: true });
 
-  cliente = new Client({
-    authStrategy: new LocalAuth({ clientId: 'ctrloja', dataPath: opcoes.sessionPath }),
-    puppeteer: {
-      headless: !visivel,
-      executablePath: localizarChrome(),
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--no-first-run',
-        '--no-default-browser-check'
-      ]
-    }
-  });
+    const { state, saveCreds } = await bly.useMultiFileAuthState(
+      path.join(opcoes.sessionPath, 'credenciais')
+    );
 
-  const meuCliente = cliente;
-  const atual = () => cliente === meuCliente;   // ignora eventos de clientes antigos
-
-  cliente.on('qr', async (qr) => {
-    if (!atual()) return;
-    pararVigia();
+    let versao;
     try {
-      ultimoQr = await QRCode.toDataURL(qr, { width: 320, margin: 1 });
+      ({ version: versao } = await bly.fetchLatestBaileysVersion());
     } catch {
-      ultimoQr = null;
+      versao = undefined;   // Baileys usa a versao embutida
     }
-    setEstado('qr', { qr: ultimoQr });
-  });
 
-  cliente.on('loading_screen', (percent, message) => {
-    if (!atual()) return;
-    progresso = { percent, message };
-    emitir('carregando', { percent, message });
-  });
+    const logger = criarLogger();
 
-  cliente.on('authenticated', () => {
-    if (!atual()) return;
-    ultimoQr = null;
-    setEstado('autenticado');
-    armarVigia();
-  });
+    sock = bly.makeWASocket({
+      version: versao,
+      auth: {
+        creds: state.creds,
+        keys: bly.makeCacheableSignalKeyStore(state.keys, logger)
+      },
+      logger,
+      browser: bly.Browsers.appropriate('CtrLoja'),
+      printQRInTerminal: false,
+      syncFullHistory: false,
+      markOnlineOnConnect: false,
+      generateHighQualityLinkPreview: false
+    });
 
-  cliente.on('auth_failure', (msg) => {
-    if (!atual()) return;
-    pararVigia();
-    ultimoErro = `Falha de autenticação: ${msg}`;
-    setEstado('erro', { erro: ultimoErro });
-  });
+    const meuSock = sock;
+    const atual = () => sock === meuSock;
 
-  cliente.on('ready', () => {
-    if (!atual()) return;
-    pararVigia();
-    ultimoQr = null;
-    progresso = null;
-    try {
-      infoConta = {
-        numero: cliente.info?.wid?.user || '',
-        nome: cliente.info?.pushname || ''
-      };
-    } catch { infoConta = null; }
-    setEstado('pronto', { conta: infoConta });
-  });
+    sock.ev.on('creds.update', saveCreds);
 
-  cliente.on('disconnected', (motivo) => {
-    if (!atual()) return;
-    pararVigia();
-    infoConta = null;
-    cliente = null;
-    setEstado('desconectado', { motivo });
-  });
+    sock.ev.on('connection.update', async (u) => {
+      if (!atual()) return;
+      const { connection, lastDisconnect, qr } = u;
 
-  cliente.initialize().catch((err) => {
-    if (!atual()) return;
-    pararVigia();
+      if (qr) {
+        try {
+          ultimoQr = await QRCode.toDataURL(qr, { width: 320, margin: 1 });
+        } catch {
+          ultimoQr = null;
+        }
+        setEstado('qr', { qr: ultimoQr });
+      }
+
+      if (connection === 'connecting') {
+        progresso = { message: 'Negociando conexão com o WhatsApp…' };
+        if (estado !== 'qr') setEstado('conectando');
+      }
+
+      if (connection === 'open') {
+        tentativasReconexao = 0;
+        ultimoQr = null;
+        progresso = null;
+        const eu = sock.user || {};
+        const numero = String(eu.id || '').split(':')[0].split('@')[0];
+        infoConta = { numero, nome: eu.name || eu.notify || '' };
+        setEstado('pronto', { conta: infoConta });
+      }
+
+      if (connection === 'close') {
+        const codigo = lastDisconnect?.error?.output?.statusCode;
+        const RAZAO = bly.DisconnectReason;
+
+        if (encerrandoDeProposito) return;
+
+        if (codigo === RAZAO.loggedOut || codigo === RAZAO.forbidden) {
+          sock = null;
+          infoConta = null;
+          ultimoErro = 'A sessão foi encerrada no celular. Use "Limpar sessão e reconectar" e leia o QR Code novamente.';
+          setEstado('desconectado', { erro: ultimoErro });
+          return;
+        }
+
+        // Reconexao automatica com espera progressiva
+        if (tentativasReconexao < 5) {
+          tentativasReconexao += 1;
+          const espera = Math.min(2000 * tentativasReconexao, 10000);
+          progresso = { message: `Reconectando… (tentativa ${tentativasReconexao} de 5)` };
+          setEstado('conectando');
+          sock = null;
+          await dormir(espera);
+          conectar({ reiniciar: false, silencioso: true }).catch(() => {});
+        } else {
+          sock = null;
+          ultimoErro = 'Não foi possível manter a conexão com o WhatsApp após 5 tentativas. '
+            + 'Verifique a internet do computador e do celular e use "Reiniciar conexão".';
+          setEstado('erro', { erro: ultimoErro });
+        }
+      }
+    });
+  } catch (err) {
+    sock = null;
     ultimoErro = err.message || String(err);
-    cliente = null;
     setEstado('erro', { erro: ultimoErro });
-  });
+  } finally {
+    conectando = false;
+  }
 
   return status();
 }
 
-/**
- * Se o evento "ready" nao chegar em ate 2 minutos apos a autenticacao,
- * o carregamento travou (situacao comum quando o WhatsApp Web muda de
- * versao ou o celular esta sem rede). Informa o usuario em vez de
- * deixar a tela parada em "Autenticado, carregando...".
- */
-function armarVigia() {
-  pararVigia();
-  vigia = setTimeout(() => {
-    if (estado === 'pronto' || estado === 'desconectado') return;
-    ultimoErro =
-      'O WhatsApp Web autenticou, mas não concluiu o carregamento em 2 minutos.\n\n' +
-      'O que costuma resolver:\n' +
-      '1) Confirme que o celular está com internet e o WhatsApp aberto;\n' +
-      '2) Clique em "Reiniciar conexão";\n' +
-      '3) Se continuar, use "Abrir navegador visível" para ver o que o ' +
-      'WhatsApp Web está mostrando (pode haver um aviso aguardando confirmação);\n' +
-      '4) Em último caso, use "Limpar sessão e reconectar" e leia o QR Code novamente.';
-    setEstado('erro', { erro: ultimoErro });
-  }, 120000);
-}
-
-async function reiniciar(visivel = false) {
-  return conectar({ reiniciar: true, visivel });
+async function reiniciar() {
+  tentativasReconexao = 0;
+  return conectar({ reiniciar: true });
 }
 
 /** Encerra a sessao no WhatsApp (exige novo QR Code na proxima conexao). */
 async function desconectar() {
-  pararVigia();
-  if (!cliente) { setEstado('desconectado'); return status(); }
-  try { await Promise.race([cliente.logout(), dormir(8000)]); } catch { /* ignora */ }
-  await encerrarCliente();
+  if (sock) {
+    try { await Promise.race([sock.logout(), dormir(8000)]); } catch { /* ignora */ }
+  }
+  await encerrarSocket();
   setEstado('desconectado');
   return status();
 }
 
-/** Apaga a sessao gravada em disco - proxima conexao pedira o QR Code. */
+/** Apaga as credenciais gravadas - a proxima conexao pedira o QR Code. */
 async function limparSessao() {
-  await encerrarCliente();
+  await encerrarSocket();
   try {
     fs.rmSync(opcoes.sessionPath, { recursive: true, force: true });
+    fs.mkdirSync(opcoes.sessionPath, { recursive: true });
   } catch (err) {
     throw new Error(`Não foi possível apagar a sessão: ${err.message}`);
   }
   ultimoErro = null;
+  tentativasReconexao = 0;
   setEstado('desconectado');
   return status();
 }
 
 async function destroy() {
-  await encerrarCliente();
+  await encerrarSocket();
 }
 
 function exigirPronto() {
-  if (!cliente || estado !== 'pronto') {
+  if (!sock || estado !== 'pronto') {
     throw new Error('WhatsApp não conectado. Abra a aba WhatsApp e leia o QR Code.');
   }
 }
 
 /* ------------------------------------------------------------------ */
+/* Diagnostico                                                         */
+/* ------------------------------------------------------------------ */
 
-/* ---------------- Listagem de grupos ---------------- */
+async function diagnostico() {
+  let versaoLib = null;
+  try { versaoLib = require('baileys/package.json').version; } catch { /* ignora */ }
 
-/** Caminho 1: API normal da biblioteca. */
-async function gruposViaApi() {
-  const chats = await cliente.getChats();
-  return chats
-    .filter((c) => c.isGroup)
-    .map((c) => ({
-      id: c.id && c.id._serialized ? c.id._serialized : String(c.id),
-      nome: c.name || '(sem nome)'
-    }));
+  let credenciais = false;
+  try {
+    credenciais = fs.existsSync(path.join(opcoes.sessionPath, 'credenciais', 'creds.json'));
+  } catch { /* ignora */ }
+
+  return {
+    estado,
+    conta: infoConta,
+    temCliente: !!sock,
+    motor: 'Baileys (protocolo multi-device, sem navegador)',
+    versaoBiblioteca: versaoLib,
+    sessao: opcoes.sessionPath,
+    credenciaisGravadas: credenciais,
+    erro: ultimoErro
+  };
 }
 
-/**
- * Caminho 2: leitura direta do Store do WhatsApp Web.
- * Usado quando o getChats() falha por causa de mudancas internas do
- * WhatsApp (o erro tipico e uma mensagem minificada de uma letra so).
- */
-async function gruposViaStore() {
-  if (!cliente.pupPage) throw new Error('Página do WhatsApp Web indisponível.');
-  return cliente.pupPage.evaluate(() => {
-    const saida = [];
-    const vistos = new Set();
-
-    const registrar = (id, nome) => {
-      if (!id || typeof id !== 'string' || !id.endsWith('@g.us')) return;
-      if (vistos.has(id)) return;
-      vistos.add(id);
-      saida.push({ id, nome: nome || id });
-    };
-
-    const idDe = (obj) => {
-      if (!obj) return null;
-      if (typeof obj === 'string') return obj;
-      if (obj._serialized) return obj._serialized;
-      if (typeof obj.toString === 'function') return obj.toString();
-      return null;
-    };
-
-    try {
-      const store = window.Store || {};
-
-      if (store.Chat && typeof store.Chat.getModelsArray === 'function') {
-        for (const c of store.Chat.getModelsArray()) {
-          registrar(idDe(c.id), c.formattedTitle || c.name || (c.contact && c.contact.name));
-        }
-      }
-
-      if (store.GroupMetadata && typeof store.GroupMetadata.getModelsArray === 'function') {
-        for (const g of store.GroupMetadata.getModelsArray()) {
-          registrar(idDe(g.id), g.subject);
-        }
-      }
-    } catch (e) {
-      return { erro: e && e.message ? e.message : String(e) };
-    }
-
-    return saida;
-  });
-}
-
-const descreverErro = (err) => {
-  const m = (err && err.message ? err.message : String(err)).trim();
-  // Mensagens minificadas do WhatsApp Web (ex.: "r", "Evaluation failed: r")
-  if (m.length <= 3 || /^Evaluation failed:\s*\w{1,3}$/i.test(m)) {
-    return `o WhatsApp Web recusou a consulta (código interno "${m}")`;
-  }
-  return m;
-};
+/* ------------------------------------------------------------------ */
+/* Grupos                                                              */
+/* ------------------------------------------------------------------ */
 
 async function listarGrupos() {
   exigirPronto();
 
-  // Antes de tudo: a pagina ainda esta autenticada?
-  const pag = await inspecionarPagina();
-  if (pag.disponivel && pag.telaDeLogin) {
-    infoConta = null;
-    setEstado('desconectado');
+  let mapa;
+  try {
+    mapa = await sock.groupFetchAllParticipating();
+  } catch (err) {
     throw new Error(
-      'A sessão do WhatsApp Web caiu — a página voltou para a tela de leitura do QR Code.\n\n' +
-      'Isso costuma acontecer quando:\n' +
-      '• o aparelho removeu o CtrLoja em "Aparelhos conectados";\n' +
-      '• uma segunda janela do navegador assumiu a mesma sessão;\n' +
-      '• a sessão gravada ficou inconsistente.\n\n' +
-      'Clique em "Limpar sessão e reconectar" e leia o QR Code novamente. ' +
-      'Importante: leia o QR que aparece DENTRO do CtrLoja e aguarde o estado mudar para "Conectado" ' +
-      'sem abrir outras janelas nesse meio-tempo.'
-    );
-  }
-  if (pag.disponivel && !pag.temStore) {
-    throw new Error(
-      'A página do WhatsApp Web ainda não terminou de carregar os módulos internos.\n\n' +
-      'Aguarde cerca de 1 minuto e tente novamente. Se persistir, use "Reiniciar conexão".' +
-      (pag.versaoWhatsApp ? `\n\n(WhatsApp Web ${pag.versaoWhatsApp})` : '')
+      'Não foi possível ler a lista de grupos.\n\n'
+      + `Detalhe técnico: ${err.message || err}\n\n`
+      + 'Verifique se o celular está com internet e tente novamente em alguns segundos.'
     );
   }
 
-  const tentativas = [];
-  let grupos = null;
+  const grupos = Object.values(mapa || {})
+    .map((g) => ({
+      id: g.id,
+      nome: g.subject || '(sem nome)'
+    }))
+    .filter((g) => g.id);
 
-  for (let i = 1; i <= 3 && !grupos; i++) {
-    try {
-      const r = await gruposViaApi();
-      if (r && r.length) grupos = r;
-      else if (r) tentativas.push(`tentativa ${i}: nenhuma conversa retornada`);
-    } catch (err) {
-      tentativas.push(`tentativa ${i} (API): ${descreverErro(err)}`);
-      console.error('[whatsapp] getChats falhou:', err);
-    }
-
-    if (!grupos) {
-      try {
-        const r = await gruposViaStore();
-        if (r && r.erro) tentativas.push(`tentativa ${i} (Store): ${r.erro}`);
-        else if (r && r.length) grupos = r;
-      } catch (err) {
-        tentativas.push(`tentativa ${i} (Store): ${descreverErro(err)}`);
-        console.error('[whatsapp] leitura do Store falhou:', err);
-      }
-    }
-
-    if (!grupos && i < 3) {
-      emitir('carregando', { message: `Sincronizando conversas… (tentativa ${i + 1} de 3)` });
-      await dormir(4000);
-    }
-  }
-
-  if (!grupos || !grupos.length) {
-    const pagFinal = await inspecionarPagina();
-    const contexto = pagFinal.disponivel
-      ? `\n\nEstado da página: ${pagFinal.qtdChats === null ? 'sem acesso à lista de conversas' : pagFinal.qtdChats + ' conversa(s) carregada(s)'}`
-        + `${pagFinal.versaoWhatsApp ? `, WhatsApp Web ${pagFinal.versaoWhatsApp}` : ''}`
-      : '';
-    const detalhe = tentativas.length ? `\n\nDetalhes: ${tentativas.join(' | ')}${contexto}` : contexto;
+  if (!grupos.length) {
     throw new Error(
-      'Não foi possível ler a lista de grupos.\n\n' +
-      'O que costuma resolver:\n' +
-      '1) Abra o WhatsApp no celular e deixe-o com internet;\n' +
-      '2) Envie ou receba uma mensagem em cada grupo desejado — grupos sem ' +
-      'atividade recente podem não ter sido sincronizados ainda;\n' +
-      '3) Aguarde 1 minuto e clique novamente em "Atualizar lista de grupos";\n' +
-      '4) Se persistir, use Desconectar e conecte de novo pelo QR Code.' +
-      detalhe
+      'Nenhum grupo encontrado nesta conta.\n\n'
+      + 'Confirme que o número conectado (+' + (infoConta?.numero || '') + ') participa de algum grupo. '
+      + 'Se você acabou de criar o grupo de testes, aguarde alguns segundos e tente novamente.'
     );
   }
 
@@ -513,14 +361,18 @@ async function listarGrupos() {
   return db.grupos.listar();
 }
 
-async function enviarMensagem(waId, texto) {
+/* ------------------------------------------------------------------ */
+/* Envio                                                               */
+/* ------------------------------------------------------------------ */
+
+async function enviarMensagem(jid, texto) {
   exigirPronto();
-  await cliente.sendMessage(waId, texto);
+  await sock.sendMessage(jid, { text: texto });
 }
 
 /**
  * Envia a fila revisada.
- * payload = { data, itens: [{id, tipo, nome, mensagem}], grupos: [waId], mensagem_unica }
+ * payload = { data, itens: [{id, tipo, nome, mensagem}], grupos: [jid], mensagem_unica }
  */
 async function enviarFila(payload = {}) {
   exigirPronto();
@@ -591,24 +443,22 @@ async function enviarFila(payload = {}) {
 }
 
 /**
- * Envia uma mensagem de teste.
- * @param texto   conteudo (opcional)
- * @param destino 'eu' = envia para o proprio numero conectado (mais seguro)
+ * @param destino 'eu' = envia para o proprio numero (mais seguro para testes)
  *                'grupos' = envia para os grupos selecionados
  */
 async function enviarTeste(texto, destino = 'grupos') {
   exigirPronto();
 
   const msg = texto || (
-    '✅ *CtrLoja* — mensagem de teste.\n\n' +
-    'A integração com o WhatsApp está funcionando corretamente.\n\n' +
-    '_A∴R∴L∴S∴ União Fraternal Rolandense nº 141_'
+    '✅ *CtrLoja* — mensagem de teste.\n\n'
+    + 'A integração com o WhatsApp está funcionando corretamente.\n\n'
+    + '_A∴R∴L∴S∴ União Fraternal Rolandense nº 141_'
   );
 
   if (destino === 'eu') {
-    const proprio = cliente.info?.wid?._serialized;
-    if (!proprio) throw new Error('Não foi possível identificar o número conectado.');
-    await enviarMensagem(proprio, msg);
+    const numero = infoConta?.numero;
+    if (!numero) throw new Error('Não foi possível identificar o número conectado.');
+    await enviarMensagem(`${numero}@s.whatsapp.net`, msg);
     return { enviados: 1, destino: 'você mesmo' };
   }
 
@@ -623,6 +473,5 @@ async function enviarTeste(texto, destino = 'grupos') {
 
 module.exports = {
   configure, status, conectar, reiniciar, desconectar, limparSessao, destroy,
-  listarGrupos, enviarFila, enviarTeste, enviarMensagem,
-  diagnostico, inspecionarPagina
+  listarGrupos, enviarFila, enviarTeste, enviarMensagem, diagnostico
 };

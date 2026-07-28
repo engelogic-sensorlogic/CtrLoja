@@ -11,7 +11,6 @@ CtrLoja — A∴R∴L∴S∴ União Fraternal Rolandense nº 141
 | Requisito | Observação |
 |-----------|------------|
 | Celular com o WhatsApp da Loja | O aparelho precisa ficar **com internet** enquanto o CtrLoja envia |
-| Google Chrome ou Microsoft Edge | Instalado no PC — o CtrLoja usa um deles para falar com o WhatsApp Web |
 | Internet no PC | A primeira execução baixa componentes adicionais |
 | **Um grupo de teste** | Crie no WhatsApp um grupo só seu (ou com 1 Irmão de confiança) chamado, por exemplo, **"CtrLoja — Testes"** |
 
@@ -130,21 +129,14 @@ Depois que tudo estiver validado:
 
 | Sintoma | Causa provável | Solução |
 |---------|----------------|---------|
-| QR Code não aparece | Chrome/Edge não encontrado | Instale o Google Chrome |
+| QR Code não aparece | Sem internet no PC | Verifique a conexão e use *Reiniciar conexão* |
 | Fica em "autenticando" e não conclui | Celular sem internet | Verifique o aparelho e reconecte |
 | "WhatsApp não conectado" ao enviar | Sessão caiu | Aba WhatsApp → Conectar novamente |
 | Desconecta sozinho com frequência | Sessão removida no celular | Confira em *Aparelhos conectados* se o CtrLoja continua lá |
 | Mensagem sai sem negrito | Asteriscos removidos do modelo | Use `*texto*` para negrito e `_texto_` para itálico |
 | Erro de GPU ao abrir | Projeto em unidade de rede | Use `rodar.bat local` |
-| App diz "Conectado" mas não lista grupos | A página do WhatsApp Web voltou para a tela de login | Clique em **🩺 Diagnóstico**. Se *"Está na tela de login" = SIM*, use **Limpar sessão e reconectar** |
-
-### Regra de ouro da reconexão
-
-Ao ler o QR Code, **use apenas a janela do CtrLoja** e espere o estado virar *Conectado*.
-Abrir o "navegador visível" ao mesmo tempo cria uma segunda instância que disputa a mesma
-sessão — o resultado é o aplicativo achar que está conectado enquanto a página real caiu
-para a tela de login. Use o modo visível só para diagnóstico, e sempre a partir de
-**Reiniciar conexão** (que encerra a instância anterior antes de abrir a nova).
+| App diz "Conectado" mas não lista grupos | Sessão inconsistente | Clique em **🩺 Diagnóstico** e, se preciso, **Limpar sessão e reconectar** |
+| "A sessão foi encerrada no celular" | O CtrLoja foi removido em *Aparelhos conectados* | **Limpar sessão e reconectar** |
 
 ---
 

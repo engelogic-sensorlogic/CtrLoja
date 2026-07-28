@@ -125,8 +125,12 @@ if /i "%MODO%"=="completo" (
 )
 
 if exist "node_modules" if exist "!MARCA!" (
-  echo [2/3] Dependencias ja instaladas neste modo.
-  goto :EXECUTAR
+  call :PRECISAINSTALAR "!MARCA!"
+  if not errorlevel 1 (
+    echo [2/3] Dependencias ja instaladas neste modo.
+    goto :EXECUTAR
+  )
+  echo [2/3] O package.json mudou desde a ultima instalacao. Atualizando...
 )
 
 echo [2/3] Instalando dependencias...
@@ -195,7 +199,11 @@ echo.
 
 pushd "%DESTINO%"
 
-if exist "node_modules" if exist "!MARCA!" goto :EXECUTARLOCAL
+if exist "node_modules" if exist "!MARCA!" (
+  call :PRECISAINSTALAR "!MARCA!"
+  if not errorlevel 1 goto :EXECUTARLOCAL
+  echo       O package.json mudou: atualizando as dependencias...
+)
 
 echo       Instalando dependencias na pasta local...
 echo       ^(so na primeira vez - pode demorar alguns minutos^)
@@ -245,6 +253,14 @@ echo.
 pause
 endlocal
 exit /b 0
+
+REM ------------------------------------------------------------------
+REM  Sub-rotina: o package.json e mais novo que o marcador de instalacao?
+REM  errorlevel 1 = precisa reinstalar   |   errorlevel 0 = esta em dia
+REM ------------------------------------------------------------------
+:PRECISAINSTALAR
+node -e "const fs=require('fs');let p=0,m=0;try{p=fs.statSync('package.json').mtimeMs}catch{};try{m=fs.statSync(process.argv[1]).mtimeMs}catch{};process.exit(p>m?1:0)" "%~1"
+exit /b %ERRORLEVEL%
 
 REM ------------------------------------------------------------------
 REM  Sub-rotina: registra a pasta se houver node.exe dentro dela

@@ -4,28 +4,23 @@ async function mostrarDiagnostico() {
   const d = await tentar(window.api.whatsapp.diagnostico(), 'Falha ao gerar diagnóstico');
   if (!d) return;
 
-  const p = d.pagina || {};
-  const sn = (v) => (v === null || v === undefined ? '—' : String(v));
+  const sn = (v) => (v === null || v === undefined || v === '' ? '—' : String(v));
   const linhas = [
     ['Estado interno', d.estado],
     ['Conta', d.conta ? `${d.conta.nome || ''} (+${d.conta.numero || ''})` : '—'],
-    ['Cliente ativo', d.temCliente ? 'sim' : 'não'],
+    ['Conexão ativa', d.temCliente ? 'sim' : 'não'],
+    ['Motor', sn(d.motor)],
     ['Biblioteca', sn(d.versaoBiblioteca)],
-    ['Navegador', sn(d.navegador)],
     ['Pasta da sessão', sn(d.sessao)],
-    ['Página acessível', p.disponivel ? 'sim' : `não${p.erro ? ' — ' + p.erro : ''}`],
-    ['Endereço', sn(p.url)],
-    ['Está na tela de login', p.telaDeLogin === undefined ? '—' : (p.telaDeLogin ? 'SIM — sessão caiu' : 'não')],
-    ['Módulos internos (Store)', p.temStore === undefined ? '—' : (p.temStore ? 'carregados' : 'NÃO carregados')],
-    ['Conversas carregadas', sn(p.qtdChats)],
-    ['Versão do WhatsApp Web', sn(p.versaoWhatsApp)]
+    ['Credenciais gravadas', d.credenciaisGravadas ? 'sim' : 'não'],
+    ['Último erro', sn(d.erro)]
   ];
 
   const tbody = el('tbody');
   for (const [k, v] of linhas) {
     tbody.appendChild(el('tr', {}, [
       el('td', { style: 'font-weight:600;width:210px', text: k }),
-      el('td', { style: 'word-break:break-all', text: v })
+      el('td', { style: 'word-break:break-all;white-space:pre-wrap', text: v })
     ]));
   }
 
@@ -35,8 +30,9 @@ async function mostrarDiagnostico() {
       el('table', {}, [tbody]),
       el('div', {
         class: 'aviso info', style: 'margin-top:12px',
-        html: 'Se <strong>"Está na tela de login" = SIM</strong>, a sessão caiu: use <em>Limpar sessão e reconectar</em>. '
-          + 'Se <strong>Store = NÃO carregados</strong>, a página ainda está inicializando ou houve mudança do WhatsApp Web.'
+        html: 'O CtrLoja conversa com o WhatsApp pelo protocolo oficial de aparelhos conectados '
+          + '(multi-device), sem abrir navegador. Se as credenciais existem mas a conexão não abre, '
+          + 'verifique a internet do computador e do celular.'
       })
     ]),
     botoes: [{ texto: 'Fechar', classe: 'secundario' }]
@@ -64,42 +60,54 @@ App.views.whatsapp = {
       if (!st.disponivel) {
         boxConexao.appendChild(el('div', {
           class: 'aviso',
-          html: 'Você está no <strong>modo interface</strong>: a biblioteca de integração com o WhatsApp não foi instalada.<br><br>' +
-                'Todo o restante do aplicativo funciona normalmente. Para habilitar o envio real, feche o programa e execute <code>rodar.bat completo</code> (ou <code>build.bat</code>) na pasta do aplicativo.'
+          html: 'Você está no <strong>modo interface</strong>: a biblioteca de integração com o WhatsApp não foi instalada.<br><br>'
+            + 'Todo o restante do aplicativo funciona normalmente. Para habilitar o envio real, feche o programa e execute '
+            + '<code>rodar-completo.bat</code> na pasta do aplicativo.'
         }));
         return;
       }
 
-      const rotulo = { desconectado: 'Desconectado', iniciando: 'Iniciando o navegador…', qr: 'Aguardando leitura do QR Code', autenticado: 'Autenticado, carregando…', pronto: 'Conectado', erro: 'Erro' }[st.estado] || st.estado;
+      const rotulo = {
+        desconectado: 'Desconectado',
+        iniciando: 'Iniciando…',
+        qr: 'Aguardando leitura do QR Code',
+        conectando: 'Conectando…',
+        pronto: 'Conectado',
+        erro: 'Erro'
+      }[st.estado] || st.estado;
+
       boxConexao.appendChild(el('p', {}, [el('strong', { text: `Estado: ${rotulo}` })]));
 
       if (st.progresso && st.estado !== 'pronto') {
-        const p = st.progresso;
         boxConexao.appendChild(el('p', {
           style: 'color:var(--c-texto-suave);font-size:12.5px;margin-top:-6px',
-          text: `${p.percent !== undefined && p.percent !== null ? p.percent + '% — ' : ''}${p.message || 'carregando…'}`
+          text: st.progresso.message || 'carregando…'
         }));
       }
 
       if (st.conta && st.conta.numero) {
-        boxConexao.appendChild(el('p', { style: 'color:var(--c-texto-suave);font-size:13px', text: `Conta: ${st.conta.nome || ''} (+${st.conta.numero})` }));
-      }
-      if (st.erro) {
-        boxConexao.appendChild(el('div', {
-          class: 'aviso',
-          style: 'white-space:pre-wrap',
-          text: st.erro
+        boxConexao.appendChild(el('p', {
+          style: 'color:var(--c-texto-suave);font-size:13px',
+          text: `Conta: ${st.conta.nome || ''} (+${st.conta.numero})`
         }));
+      }
+
+      if (st.erro) {
+        boxConexao.appendChild(el('div', { class: 'aviso', style: 'white-space:pre-wrap', text: st.erro }));
       }
 
       if (st.estado === 'qr' && st.qr) {
         boxConexao.appendChild(el('div', { class: 'qr-area' }, [
           el('img', { src: st.qr, alt: 'QR Code' }),
-          el('p', { style: 'font-size:12.5px;color:var(--c-texto-suave)', text: 'No celular: WhatsApp → Aparelhos conectados → Conectar um aparelho → aponte para o QR acima.' })
+          el('p', {
+            style: 'font-size:12.5px;color:var(--c-texto-suave)',
+            text: 'No celular: WhatsApp → Aparelhos conectados → Conectar um aparelho → aponte para o QR acima.'
+          })
         ]));
       }
 
       const acoes = el('div', { class: 'linha compacta', style: 'margin-top:12px' });
+
       if (st.estado === 'pronto') {
         acoes.appendChild(el('button', {
           class: 'btn secundario', text: 'Atualizar lista de grupos',
@@ -120,19 +128,7 @@ App.views.whatsapp = {
             if (res) toast(`Teste enviado para ${res.enviados} grupo(s).`, 'ok');
           }
         }));
-        acoes.appendChild(el('button', {
-          class: 'btn secundario', text: '🩺 Diagnóstico',
-          onclick: mostrarDiagnostico
-        }));
-        acoes.appendChild(el('button', {
-          class: 'btn perigo', text: 'Limpar sessão e reconectar',
-          onclick: async () => {
-            if (!await confirmar('A sessão salva será apagada e será necessário ler o QR Code novamente. Continuar?')) return;
-            await tentar(window.api.whatsapp.limparSessao(), 'Falha ao limpar a sessão');
-            await tentar(window.api.whatsapp.conectar(), 'Falha ao conectar');
-            pintarConexao();
-          }
-        }));
+        acoes.appendChild(el('button', { class: 'btn secundario', text: '🩺 Diagnóstico', onclick: mostrarDiagnostico }));
         acoes.appendChild(el('button', {
           class: 'btn perigo', text: 'Desconectar',
           onclick: async () => {
@@ -150,26 +146,13 @@ App.views.whatsapp = {
             const btn = ev.currentTarget;
             btn.disabled = true;
             btn.textContent = ocioso ? 'Conectando…' : 'Reiniciando…';
-            toast(ocioso ? 'Iniciando conexão…' : 'Encerrando a conexão anterior e reabrindo…', '', 6000);
             if (ocioso) await tentar(window.api.whatsapp.conectar(), 'Falha ao conectar');
-            else await tentar(window.api.whatsapp.reiniciar(false), 'Falha ao reiniciar');
+            else await tentar(window.api.whatsapp.reiniciar(), 'Falha ao reiniciar');
             pintarConexao();
           }
         }));
 
-        acoes.appendChild(el('button', {
-          class: 'btn secundario', text: '🩺 Diagnóstico',
-          onclick: mostrarDiagnostico
-        }));
-
-        acoes.appendChild(el('button', {
-          class: 'btn secundario', text: '🔍 Abrir navegador visível',
-          onclick: async () => {
-            toast('Abrindo o WhatsApp Web em janela visível para diagnóstico…', '', 8000);
-            await tentar(window.api.whatsapp.reiniciar(true), 'Falha ao abrir em modo diagnóstico');
-            pintarConexao();
-          }
-        }));
+        acoes.appendChild(el('button', { class: 'btn secundario', text: '🩺 Diagnóstico', onclick: mostrarDiagnostico }));
 
         acoes.appendChild(el('button', {
           class: 'btn perigo', text: 'Limpar sessão e reconectar',
@@ -181,19 +164,13 @@ App.views.whatsapp = {
           }
         }));
       }
-      boxConexao.appendChild(acoes);
 
-      if (st.estado === 'autenticado' || st.estado === 'iniciando') {
-        boxConexao.appendChild(el('div', {
-          class: 'aviso', style: 'margin-top:12px',
-          html: 'O primeiro carregamento após a leitura do QR Code costuma levar de 30 segundos a 2 minutos, '
-            + 'pois o WhatsApp sincroniza as conversas. Se passar disso, o CtrLoja avisa automaticamente.'
-        }));
-      }
+      boxConexao.appendChild(acoes);
 
       boxConexao.appendChild(el('div', {
         class: 'aviso info', style: 'margin-top:14px',
-        html: 'A sessão fica salva no computador — o QR Code só precisa ser lido na primeira vez. Mantenha o celular com internet: o WhatsApp Web depende do aparelho pareado.'
+        html: 'A sessão fica salva no computador — o QR Code só precisa ser lido na primeira vez. '
+          + 'Mantenha o celular com internet.'
       }));
     }
 
@@ -203,7 +180,7 @@ App.views.whatsapp = {
 
       let lista;
       if (daNuvem) {
-        toast('Buscando grupos no WhatsApp… isso pode levar até 15 segundos.', '', 8000);
+        toast('Buscando grupos no WhatsApp…', '', 6000);
         const r = await window.api.whatsapp.grupos();
         if (r && r.ok) {
           lista = r.data;
