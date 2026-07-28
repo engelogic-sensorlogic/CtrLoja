@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src 'self' data: file:; style-src 'self' 'unsafe-inline'; script-src 'self';" />
+  <title>CtrLoja — União Fraternal Rolandense</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+  <aside class="lateral">
+    <div class="marca">
+      <img id="logoLateral" class="marca-logo" alt="" hidden />
+      <div class="marca-txt">
+        <strong>CtrLoja</strong>
+        <span id="marcaSigla">UFR</span>
+      </div>
+    </div>
+
+    <nav id="menu">
+      <button class="nav-item ativo" data-view="dashboard"><span class="ico">◈</span> Painel</button>
+      <button class="nav-item" data-view="obreiros"><span class="ico">👤</span> Obreiros</button>
+      <button class="nav-item" data-view="agenda"><span class="ico">📅</span> Agenda</button>
+      <button class="nav-item" data-view="calendario"><span class="ico">⚜</span> Calendário</button>
+      <button class="nav-item" data-view="modelos"><span class="ico">✉</span> Modelos</button>
+      <button class="nav-item" data-view="whatsapp"><span class="ico">💬</span> WhatsApp</button>
+      <button class="nav-item" data-view="historico"><span class="ico">🗂</span> Histórico</button>
+      <button class="nav-item" data-view="config"><span class="ico">⚙</span> Configurações</button>
+    </nav>
+
+    <div class="lateral-rodape">
+      <div id="statusWa" class="status-pill off">WhatsApp desconectado</div>
+      <small id="versaoApp"></small>
+    </div>
+  </aside>
+
+  <main class="conteudo">
+    <header class="topo">
+      <div>
+        <h1 id="tituloView">Painel</h1>
+        <p id="subtituloView" class="sub"></p>
+      </div>
+      <div class="topo-acoes" id="topoAcoes"></div>
+    </header>
+
+    <section id="view" class="view"></section>
+  </main>
+
+  <div id="modal" class="modal oculto">
+    <div class="modal-caixa">
+      <header class="modal-topo">
+        <h2 id="modalTitulo">Título</h2>
+        <button class="btn-icone" id="modalFechar">✕</button>
+      </header>
+      <div id="modalCorpo" class="modal-corpo"></div>
+      <footer id="modalRodape" class="modal-rodape"></footer>
+    </div>
+  </div>
+
+  <div id="toasts" class="toasts"></div>
+
+  <script src="js/app.js"></script>
+  <script src="js/dashboard.js"></script>
+  <script src="js/obreiros.js"></script>
+  <script src="js/agenda.js"></script>
+  <script src="js/calendario.js"></script>
+  <script src="js/modelos.js"></script>
+  <script src="js/whatsapp.js"></script>
+  <script src="js/historico.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/boot.js"></script>
+</body>
+</html>

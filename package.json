@@ -1,0 +1,62 @@
+{
+  "name": "ctrloja",
+  "productName": "CtrLoja",
+  "version": "1.0.0",
+  "description": "Gestor de Agenda e Comunicacao da Loja Maconica Uniao Fraternal Rolandense - UFR (GLP)",
+  "main": "src/main/main.js",
+  "author": {
+    "name": "Engelogic / SensorLogic",
+    "email": "engenharia@engelogic.com.br"
+  },
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "rebuild": "electron-rebuild -f -w better-sqlite3",
+    "postinstall": "electron-builder install-app-deps",
+    "test": "node test/teste-calendario.js && node --no-warnings test/teste-integracao.js",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --win --x64"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.5.0",
+    "node-cron": "^3.0.3",
+    "qrcode": "^1.5.4",
+    "whatsapp-web.js": "^1.26.0"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3",
+    "@electron/rebuild": "^3.6.0"
+  },
+  "build": {
+    "appId": "br.com.engelogic.ctrloja",
+    "productName": "CtrLoja",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "resources/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "resources"
+      }
+    ],
+    "win": {
+      "target": [
+        "dir"
+      ],
+      "icon": "build/icon.ico"
+    },
+    "asar": true,
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**"
+    ]
+  }
+}

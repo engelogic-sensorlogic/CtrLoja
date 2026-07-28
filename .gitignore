@@ -1,0 +1,23 @@
+node_modules/
+dist/
+out/
+release/
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Sessao autenticada do WhatsApp (NUNCA versionar)
+.wwebjs_auth/
+.wwebjs_cache/
+wa-session/
+
+# Banco de dados local e backups
+*.db
+*.db-journal
+*.sqlite
+backups/
+
+# Saidas do instalador
+installer/Output/
+installer/*.exe
