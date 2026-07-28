@@ -24,6 +24,8 @@ try {
     + '(use "rodar.bat completo" para habilitar o envio real).');
 }
 
+const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+
 let cliente = null;
 let opcoes = { sessionPath: null, onEvent: () => {} };
 let estado = 'desconectado';   // desconectado | iniciando | qr | autenticado | pronto | erro
@@ -168,18 +170,127 @@ function exigirPronto() {
 
 /* ------------------------------------------------------------------ */
 
+/* ---------------- Listagem de grupos ---------------- */
+
+/** Caminho 1: API normal da biblioteca. */
+async function gruposViaApi() {
+  const chats = await cliente.getChats();
+  return chats
+    .filter((c) => c.isGroup)
+    .map((c) => ({
+      id: c.id && c.id._serialized ? c.id._serialized : String(c.id),
+      nome: c.name || '(sem nome)'
+    }));
+}
+
+/**
+ * Caminho 2: leitura direta do Store do WhatsApp Web.
+ * Usado quando o getChats() falha por causa de mudancas internas do
+ * WhatsApp (o erro tipico e uma mensagem minificada de uma letra so).
+ */
+async function gruposViaStore() {
+  if (!cliente.pupPage) throw new Error('Página do WhatsApp Web indisponível.');
+  return cliente.pupPage.evaluate(() => {
+    const saida = [];
+    const vistos = new Set();
+
+    const registrar = (id, nome) => {
+      if (!id || typeof id !== 'string' || !id.endsWith('@g.us')) return;
+      if (vistos.has(id)) return;
+      vistos.add(id);
+      saida.push({ id, nome: nome || id });
+    };
+
+    const idDe = (obj) => {
+      if (!obj) return null;
+      if (typeof obj === 'string') return obj;
+      if (obj._serialized) return obj._serialized;
+      if (typeof obj.toString === 'function') return obj.toString();
+      return null;
+    };
+
+    try {
+      const store = window.Store || {};
+
+      if (store.Chat && typeof store.Chat.getModelsArray === 'function') {
+        for (const c of store.Chat.getModelsArray()) {
+          registrar(idDe(c.id), c.formattedTitle || c.name || (c.contact && c.contact.name));
+        }
+      }
+
+      if (store.GroupMetadata && typeof store.GroupMetadata.getModelsArray === 'function') {
+        for (const g of store.GroupMetadata.getModelsArray()) {
+          registrar(idDe(g.id), g.subject);
+        }
+      }
+    } catch (e) {
+      return { erro: e && e.message ? e.message : String(e) };
+    }
+
+    return saida;
+  });
+}
+
+const descreverErro = (err) => {
+  const m = (err && err.message ? err.message : String(err)).trim();
+  // Mensagens minificadas do WhatsApp Web (ex.: "r", "Evaluation failed: r")
+  if (m.length <= 3 || /^Evaluation failed:\s*\w{1,3}$/i.test(m)) {
+    return `o WhatsApp Web recusou a consulta (código interno "${m}")`;
+  }
+  return m;
+};
+
 async function listarGrupos() {
   exigirPronto();
-  const chats = await cliente.getChats();
-  const grupos = chats
-    .filter((c) => c.isGroup)
-    .map((c) => ({ id: c.id._serialized, nome: c.name || '(sem nome)' }))
-    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+
+  const tentativas = [];
+  let grupos = null;
+
+  for (let i = 1; i <= 3 && !grupos; i++) {
+    try {
+      const r = await gruposViaApi();
+      if (r && r.length) grupos = r;
+      else if (r) tentativas.push(`tentativa ${i}: nenhuma conversa retornada`);
+    } catch (err) {
+      tentativas.push(`tentativa ${i} (API): ${descreverErro(err)}`);
+      console.error('[whatsapp] getChats falhou:', err);
+    }
+
+    if (!grupos) {
+      try {
+        const r = await gruposViaStore();
+        if (r && r.erro) tentativas.push(`tentativa ${i} (Store): ${r.erro}`);
+        else if (r && r.length) grupos = r;
+      } catch (err) {
+        tentativas.push(`tentativa ${i} (Store): ${descreverErro(err)}`);
+        console.error('[whatsapp] leitura do Store falhou:', err);
+      }
+    }
+
+    if (!grupos && i < 3) {
+      emitir('carregando', { message: `Sincronizando conversas… (tentativa ${i + 1} de 3)` });
+      await dormir(4000);
+    }
+  }
+
+  if (!grupos || !grupos.length) {
+    const detalhe = tentativas.length ? `\n\nDetalhes: ${tentativas.join(' | ')}` : '';
+    throw new Error(
+      'Não foi possível ler a lista de grupos.\n\n' +
+      'O que costuma resolver:\n' +
+      '1) Abra o WhatsApp no celular e deixe-o com internet;\n' +
+      '2) Envie ou receba uma mensagem em cada grupo desejado — grupos sem ' +
+      'atividade recente podem não ter sido sincronizados ainda;\n' +
+      '3) Aguarde 1 minuto e clique novamente em "Atualizar lista de grupos";\n' +
+      '4) Se persistir, use Desconectar e conecte de novo pelo QR Code.' +
+      detalhe
+    );
+  }
+
+  grupos.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
   db.grupos.sincronizar(grupos);
   return db.grupos.listar();
 }
-
-const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function enviarMensagem(waId, texto) {
   exigirPronto();

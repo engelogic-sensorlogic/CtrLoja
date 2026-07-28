@@ -95,8 +95,25 @@ App.views.whatsapp = {
 
       let lista;
       if (daNuvem) {
-        toast('Buscando grupos no WhatsApp…');
-        lista = await tentar(window.api.whatsapp.grupos(), 'Falha ao listar grupos');
+        toast('Buscando grupos no WhatsApp… isso pode levar até 15 segundos.', '', 8000);
+        const r = await window.api.whatsapp.grupos();
+        if (r && r.ok) {
+          lista = r.data;
+          toast(`${(lista || []).length} grupo(s) encontrado(s).`, 'ok');
+        } else {
+          lista = await tentar(window.api.whatsapp.gruposSalvos());
+          Modal.abrir({
+            titulo: 'Não foi possível listar os grupos',
+            corpo: el('pre', {
+              style: 'white-space:pre-wrap;font-family:inherit;font-size:13px;line-height:1.55;margin:0',
+              text: (r && r.error) || 'Erro desconhecido.'
+            }),
+            botoes: [
+              { texto: 'Fechar', classe: 'secundario' },
+              { texto: 'Tentar novamente', classe: '', acao: () => { Modal.fechar(); carregarGrupos(true); } }
+            ]
+          });
+        }
       } else {
         lista = await tentar(window.api.whatsapp.gruposSalvos());
       }
