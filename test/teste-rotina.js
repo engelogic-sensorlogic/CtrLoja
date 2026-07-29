@@ -66,7 +66,7 @@ const ok = (n, c, e = '') => { console.log((c ? '  OK  ' : 'FALHA ') + n + (e ? 
   console.log('== Modo revisao entrega a fila, nao envia ==');
   db.config.salvar('disparo_modo', 'revisao');
   let filaRecebida = null;
-  scheduler.start({ onFila: (f) => { filaRecebida = f; }, onLog: () => {} });
+  scheduler.start({ userData: tmp, onFila: (f) => { filaRecebida = f; }, onLog: () => {} });
   wa._enviados = [];
   r = await scheduler.executar({ origem: 'teste' });
   ok('sinaliza revisao', r.revisao === true);
@@ -147,6 +147,30 @@ const ok = (n, c, e = '') => { console.log((c ? '  OK  ' : 'FALHA ') + n + (e ? 
   ok('traz o modo', est.modo === 'automatico');
   ok('traz a expressao', !!est.expressao);
   ok('traz o ultimo resultado', !!est.ultimo_resultado);
+
+  console.log('== Registro em arquivo e motivos ==');
+  db.config.salvar('disparo_modo', 'manual');
+  let v = await scheduler.verificarPendencia('teste', false);
+  ok('explica o modo manual', v.executou === false && /modo manual/.test(v.motivo), v.motivo);
+
+  db.config.salvar('disparo_modo', 'automatico');
+  db.config.salvar('disparo_hora', '23:59');
+  v = await scheduler.verificarPendencia('teste', false);
+  const hora = new Date().getHours();
+  ok('explica a espera pelo horario', hora < 23 ? (v.executou === false && /aguardando o horário/.test(v.motivo)) : true, v.motivo);
+
+  db.config.salvar('disparo_hora', '00:01');
+  db.getConn().prepare('DELETE FROM controle_disparo').run();
+  wa._estado = 'pronto'; wa._enviados = [];
+  await scheduler.verificarPendencia('teste', false);
+  v = await scheduler.verificarPendencia('teste', false);
+  ok('explica que ja disparou hoje', v.executou === false && /já foi realizado/.test(v.motivo), v.motivo);
+
+  const registro = scheduler.lerLog(500);
+  ok('registro em arquivo criado', !!registro.arquivo && /rotina\.log$/.test(registro.arquivo), String(registro.arquivo));
+  ok('registro tem linhas', registro.linhas.length > 5, String(registro.linhas.length));
+  ok('registro guarda o disparo', registro.linhas.some(l => /Disparo concluído/.test(l)));
+  ok('registro guarda os motivos', registro.linhas.some(l => /Verificação \(teste\)/.test(l)));
 
   scheduler.stop();
   console.log('\n' + (falhas ? ('FALHAS: ' + falhas) : 'TODOS OS TESTES DA ROTINA PASSARAM'));

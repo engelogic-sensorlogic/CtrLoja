@@ -119,6 +119,35 @@ App.views.config = {
       el('div', { class: 'linha compacta', style: 'margin-top:12px' }, [
         el('button', { class: 'btn secundario', text: '🔄 Atualizar', onclick: () => pintarRotina() }),
         el('button', {
+          class: 'btn secundario', text: '📋 Ver registro da rotina',
+          onclick: async () => {
+            const r = await tentar(window.api.rotina.log(300), 'Falha ao ler o registro');
+            if (!r) return;
+            Modal.abrir({
+              titulo: 'Registro da rotina de disparo',
+              largura: '900px',
+              corpo: el('div', {}, [
+                el('p', { style: 'font-size:12px;color:var(--c-texto-suave);margin:0 0 8px', text: r.arquivo || '' }),
+                el('pre', {
+                  style: 'white-space:pre-wrap;font-size:12px;line-height:1.5;max-height:60vh;overflow:auto;'
+                    + 'background:#F7FCFC;border:1px solid var(--c-borda);border-radius:8px;padding:10px;margin:0',
+                  text: r.linhas.length ? r.linhas.join('\n') : '(sem registros ainda)'
+                })
+              ]),
+              botoes: [{ texto: 'Fechar', classe: 'secundario' }]
+            });
+          }
+        }),
+        el('button', {
+          class: 'btn secundario', text: '🔎 Verificar pendência',
+          onclick: async () => {
+            const r = await tentar(window.api.rotina.verificar(), 'Falha na verificação');
+            if (r && !r.executou) toast(`Rotina não disparou: ${r.motivo}`, '', 8000);
+            else if (r) toast('Rotina executada.', 'ok');
+            pintarRotina();
+          }
+        }),
+        el('button', {
           class: 'btn', text: '▶ Executar rotina agora',
           onclick: async () => {
             const r = await tentar(window.api.rotina.executar(false), 'Falha ao executar a rotina');

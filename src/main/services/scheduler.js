@@ -9,6 +9,8 @@
  *   - confere periodicamente, para o caso de o computador ter ficado suspenso.
  */
 
+const fs = require('fs');
+const path = require('path');
 const cron = require('node-cron');
 const db = require('../db/database');
 const agenda = require('./agenda');
@@ -19,6 +21,8 @@ let tarefa = null;
 let vigia = null;
 let callbacks = { onFila: () => {}, onLog: () => {} };
 let executando = false;
+let arquivoLog = null;
+const memoriaLog = [];
 
 let situacao = {
   expressao: null,
@@ -30,10 +34,49 @@ let situacao = {
 
 const INTERVALO_VIGIA = 5 * 60 * 1000;   // 5 minutos
 
+/**
+ * Registro da rotina.
+ *
+ * O disparo acontece sem ninguem olhando; sem um registro em arquivo nao ha
+ * como saber depois por que uma mensagem saiu - ou por que nao saiu.
+ */
+function configurarLog(pastaUserData) {
+  try {
+    const pasta = path.join(pastaUserData, 'logs');
+    fs.mkdirSync(pasta, { recursive: true });
+    arquivoLog = path.join(pasta, 'rotina.log');
+
+    // Evita crescimento indefinido: acima de 1 MB, mantem so o final
+    if (fs.existsSync(arquivoLog) && fs.statSync(arquivoLog).size > 1024 * 1024) {
+      const texto = fs.readFileSync(arquivoLog, 'utf8');
+      fs.writeFileSync(arquivoLog, texto.slice(-200 * 1024), 'utf8');
+    }
+  } catch (err) {
+    console.warn('[scheduler] não foi possível preparar o registro:', err.message);
+  }
+}
+
 function log(msg) {
   const linha = `[${new Date().toLocaleString('pt-BR')}] ${msg}`;
   console.log('[scheduler]', msg);
+
+  memoriaLog.push(linha);
+  if (memoriaLog.length > 400) memoriaLog.shift();
+
+  if (arquivoLog) {
+    try { fs.appendFileSync(arquivoLog, linha + '\n', 'utf8'); } catch { /* ignora */ }
+  }
   try { callbacks.onLog(linha); } catch { /* ignora */ }
+}
+
+function lerLog(limite = 200) {
+  if (arquivoLog && fs.existsSync(arquivoLog)) {
+    try {
+      const linhas = fs.readFileSync(arquivoLog, 'utf8').split('\n').filter(Boolean);
+      return { arquivo: arquivoLog, linhas: linhas.slice(-limite) };
+    } catch { /* cai para a memoria */ }
+  }
+  return { arquivo: arquivoLog, linhas: memoriaLog.slice(-limite) };
 }
 
 /* ------------------------------------------------------------------ */
@@ -163,13 +206,23 @@ async function executar(opts = {}) {
  * Recuperacao: o aplicativo pode ter sido aberto depois do horario, ou o
  * computador pode ter ficado suspenso quando o cron deveria ter disparado.
  */
-async function verificarPendencia(origem = 'verificação') {
+async function verificarPendencia(origem = 'verificação', silencioso = true) {
   const modo = db.config.obter('disparo_modo', 'revisao');
-  if (modo === 'manual') return;
-  if (!hojeEhDiaHabilitado()) return;
-  if (!horarioJaPassou()) return;
-  if (db.envios.jaDisparado(cal.hojeISO())) return;
+  const { h, m } = horaConfigurada();
+  const horario = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+
+  const recusar = (motivo) => {
+    if (!silencioso) log(`Verificação (${origem}): ${motivo}`);
+    return { executou: false, motivo };
+  };
+
+  if (modo === 'manual') return recusar('modo manual — a rotina não dispara sozinha.');
+  if (!hojeEhDiaHabilitado()) return recusar('hoje não é um dia habilitado nas configurações.');
+  if (!horarioJaPassou()) return recusar(`ainda não são ${horario} — aguardando o horário.`);
+  if (db.envios.jaDisparado(cal.hojeISO())) return recusar('o disparo de hoje já foi realizado.');
+
   await executar({ origem });
+  return { executou: true };
 }
 
 /** Chamado quando o WhatsApp fica pronto: refaz o disparo que ficou adiado. */
@@ -185,10 +238,13 @@ async function aoWhatsappPronto() {
 
 function start(cbs = {}) {
   callbacks = { ...callbacks, ...cbs };
+  if (cbs.userData) configurarLog(cbs.userData);
+
+  log('===== CtrLoja iniciado =====');
   reagendar();
 
   // Recuperacao no arranque, com folga para o WhatsApp conectar
-  setTimeout(() => verificarPendencia('abertura do aplicativo').catch(() => {}), 20000);
+  setTimeout(() => verificarPendencia('abertura do aplicativo', false).catch(() => {}), 25000);
 
   if (vigia) clearInterval(vigia);
   vigia = setInterval(() => verificarPendencia('verificação periódica').catch(() => {}), INTERVALO_VIGIA);
@@ -233,5 +289,5 @@ function estadoRotina() {
 
 module.exports = {
   start, stop, reagendar, executar, verificarPendencia, aoWhatsappPronto,
-  expressaoCron, estadoRotina
+  expressaoCron, estadoRotina, lerLog, log
 };

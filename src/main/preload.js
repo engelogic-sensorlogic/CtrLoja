@@ -64,7 +64,8 @@ contextBridge.exposeInMainWorld('api', {
   rotina: {
     estado: () => call('rotina:estado'),
     executar: (forcar) => call('rotina:executar', forcar),
-    verificar: () => call('rotina:verificar')
+    verificar: () => call('rotina:verificar'),
+    log: (limite) => call('rotina:log', limite)
   },
 
   whatsapp: {

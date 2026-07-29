@@ -140,6 +140,7 @@ app.whenReady().then(() => {
   });
 
   scheduler.start({
+    userData: app.getPath('userData'),
     onFila: (fila) => send('agenda:fila-do-dia', fila),
     onLog: (msg) => send('app:log', msg)
   });
@@ -271,7 +272,8 @@ handle('config:salvar', (mapa) => {
 
 handle('rotina:estado', () => scheduler.estadoRotina());
 handle('rotina:executar', (forcar) => scheduler.executar({ origem: 'execução manual', forcar: !!forcar }));
-handle('rotina:verificar', () => scheduler.verificarPendencia('verificação manual'));
+handle('rotina:verificar', () => scheduler.verificarPendencia('verificação manual', false));
+handle('rotina:log', (limite) => scheduler.lerLog(limite || 200));
 
 /* ------------------------------------------------------------------ */
 /* IPC - WhatsApp                                                      */
