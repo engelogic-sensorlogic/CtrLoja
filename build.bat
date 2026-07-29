@@ -145,18 +145,13 @@ if not exist "dist\win-unpacked\CtrLoja.exe" (
   goto :FALHA
 )
 
-REM  Confere se a integracao com o WhatsApp entrou no pacote
-call npx asar list "dist\win-unpacked\resources\app.asar" > "%TEMP%\ctrloja-asar.txt" 2>nul
-if exist "%TEMP%\ctrloja-asar.txt" (
-  findstr /i /c:"node_modules/baileys" "%TEMP%\ctrloja-asar.txt" >nul
-  if errorlevel 1 (
-    echo.
-    echo [ERRO] O pacote gerado NAO contem a biblioteca baileys.
-    echo        O instalador ficaria sem a integracao com o WhatsApp.
-    goto :FALHA
-  )
-  echo       OK: integracao com o WhatsApp incluida no pacote.
-  del /q "%TEMP%\ctrloja-asar.txt" >nul 2>&1
+REM  Confere o conteudo do pacote lendo o cabecalho do app.asar.
+REM  A leitura e feita por um script proprio, sem ferramenta externa:
+REM  depender do "npx asar" gerava falso negativo em maquina sem internet.
+call node "ferramentas\verificar-pacote.js"
+if errorlevel 1 (
+  echo [ERRO] O pacote gerado esta incompleto - veja a lista acima.
+  goto :FALHA
 )
 
 REM  Logotipos e icone junto do executavel

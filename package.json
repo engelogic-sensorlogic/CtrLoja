@@ -15,6 +15,7 @@
     "dev": "electron . --dev",
     "test": "node test/teste-calendario.js && node --no-warnings test/teste-integracao.js && node --no-warnings test/teste-rotina.js",
     "modelos": "node ferramentas/sincronizar-modelos.js",
+    "verificar-pacote": "node ferramentas/verificar-pacote.js",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
     "pack": "electron-builder --win --x64 --dir",
     "dist": "electron-builder --win --x64"
@@ -42,9 +43,9 @@
     "files": [
       "src/**/*",
       "package.json",
-      "!**/*.map",
-      "!**/test/**",
-      "!**/ferramentas/**"
+      "!test/**",
+      "!ferramentas/**",
+      "!docs/**"
     ],
     "extraFiles": [
       {
