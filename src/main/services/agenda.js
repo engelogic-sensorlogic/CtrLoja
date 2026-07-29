@@ -289,12 +289,15 @@ function montarFila(isoData) {
 
   if (agrupar) {
     const cabecalho = db.templates.obter('cabecalho_diario');
-    const head = cabecalho ? tpl.renderizar(cabecalho.corpo, tpl.contextoBase(data)) : '';
 
-    // Tudo que ja aparece no cabecalho do resumo nao se repete nos blocos
-    const linhasDoCabecalho = head.split('\n');
+    // O cabecalho e renderizado duas vezes: a primeira serve apenas para saber
+    // quais linhas fixas nao devem se repetir nos blocos.
+    const ctxBase = tpl.contextoBase(data);
+    const headBruto = cabecalho ? tpl.renderizar(cabecalho.corpo, { ...ctxBase, tem_pauta: '1' }) : '';
+    const linhasDoCabecalho = headBruto.split('\n');
 
     const blocos = [];
+    let temPauta = false;
 
     for (const item of itens) {
       if (!item.selecionado) continue;
@@ -309,11 +312,21 @@ function montarFila(isoData) {
         item.fora_do_agrupamento = 'Mensagem sem conteúdo próprio';
         continue;
       }
+
+      if (item.tipo === 'sessao') temPauta = true;
       blocos.push(corpo);
     }
 
     if (blocos.length) {
-      mensagemUnica = [head, ...blocos].filter(Boolean).join('\n\n———————————————\n\n');
+      // "AGENDA DE <data>" so faz sentido quando ha pauta da Loja no dia
+      const head = cabecalho
+        ? tpl.renderizar(cabecalho.corpo, { ...ctxBase, tem_pauta: temPauta ? '1' : '' })
+        : '';
+
+      // O cabecalho e papel timbrado, nao um bloco de conteudo: entra sem
+      // o separador, que fica reservado para separar um evento do outro.
+      const corpo = blocos.join('\n\n———————————————\n\n');
+      mensagemUnica = head ? `${head}\n\n${corpo}` : corpo;
     }
   }
 

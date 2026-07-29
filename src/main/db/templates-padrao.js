@@ -256,7 +256,7 @@ T∴F∴A∴`
 {{oriente}}
 Esta Chancelaria informa ...
 
-📅 AGENDA DE {{data_extenso}}
+{{#tem_pauta}}📅 AGENDA DE {{data_extenso}}{{/tem_pauta}}
 `
   },
 

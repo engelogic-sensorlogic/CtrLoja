@@ -71,7 +71,8 @@ db.config.salvar('eventos_habilitados', JSON.stringify(['aniversario_obreiro','a
 console.log('== Modo agrupado ==');
 db.config.salvar('agrupar_mensagens','1');
 const fila3=agenda.montarFila('2026-07-28');
-ok('mensagem unica gerada', !!fila3.mensagem_unica && fila3.mensagem_unica.includes('AGENDA DE'));
+ok('mensagem unica gerada', !!fila3.mensagem_unica && /União Fraternal Rolandense/.test(fila3.mensagem_unica));
+ok('sem pauta no dia, sem linha AGENDA DE', !/AGENDA DE/.test(fila3.mensagem_unica));
 db.config.salvar('agrupar_mensagens','0');
 
 console.log('== Backup exportar/importar ==');
@@ -217,7 +218,7 @@ const ocorrencias = (fAgr.mensagem_unica.match(/União Fraternal Rolandense/g) |
 ok('nome da Loja nao se repete', ocorrencias === 1, String(ocorrencias));
 const chanc = (fAgr.mensagem_unica.match(/Esta Chancelaria informa/g) || []).length;
 ok('linha fixa do cabecalho nao se repete', chanc <= 1, String(chanc));
-ok('cabecalho AGENDA DE presente', /AGENDA DE/.test(fAgr.mensagem_unica));
+ok('sem sessao com pauta: nao traz AGENDA DE', !/AGENDA DE/.test(fAgr.mensagem_unica));
 console.log('\n--- mensagem agrupada ---\n' + fAgr.mensagem_unica + '\n-------------------------');
 
 console.log('== Dia so com sessao sem pauta: nada a enviar ==');
@@ -248,6 +249,39 @@ ok('detecta bloco vazio', tplMod.temConteudo('*A∴R∴L∴S∴ União Fraternal
 ok('detecta bloco com texto', tplMod.temConteudo('*A∴R∴L∴S∴ União Fraternal Rolandense nº 141*\n\nParabéns!') === true);
 ok('remove linha fixa do cabecalho diario', tplMod.removerCabecalhoLoja('Esta Chancelaria informa ...\n\nTexto útil', cabTeste) === 'Texto útil');
 ok('remove cabecalho', tplMod.removerCabecalhoLoja('*A∴R∴L∴S∴ União Fraternal Rolandense nº 141*\n_Oriente de Rolândia - PR_\n\nTexto').startsWith('Texto'));
+
+console.log('== Cabecalho AGENDA DE so com pauta ==');
+db.config.salvar('agrupar_mensagens', '1');
+db.sessoes.excluirPorData('2026-07-27');
+const oCab = db.obreiros.salvar({ nome: 'Irmão do Cabecalho', tratamento: 'Ir.∴', grau: 'Mestre',
+  situacao: 'Ativo', dt_nascimento: '1975-07-27' });
+
+let fc = agenda.montarFila('2026-07-27');
+ok('sem sessao: sem linha AGENDA DE', !/AGENDA DE/.test(fc.mensagem_unica || ''), (fc.mensagem_unica||'').split('\n').slice(0,6).join(' | '));
+ok('sem separador logo apos o cabecalho', !/Chancelaria[\s\S]{0,40}———/.test(fc.mensagem_unica || ''));
+ok('mensagem tem o aniversario', /Irmão do Cabecalho/.test(fc.mensagem_unica || ''));
+console.log('\n--- sem pauta ---\n' + fc.mensagem_unica + '\n------------------');
+
+db.sessoes.salvar({ data: '2026-07-27', grau: 'Mestre', tipo: 'Magna', agenda_dia: '1. Abertura\n2. Balaustre' });
+fc = agenda.montarFila('2026-07-27');
+ok('com pauta: linha AGENDA DE presente', /AGENDA DE/.test(fc.mensagem_unica || ''));
+ok('pauta aparece na mensagem', /Balaustre/.test(fc.mensagem_unica || ''));
+const seps = (fc.mensagem_unica.match(/\n———————————————\n/g) || []).length;
+ok('um separador entre os dois eventos', seps === 1, String(seps));
+console.log('\n--- com pauta ---\n' + fc.mensagem_unica + '\n------------------');
+
+db.sessoes.excluirPorData('2026-07-27');
+db.obreiros.excluir(oCab.id);
+db.config.salvar('agrupar_mensagens', '0');
+
+console.log('== Migracao do cabecalho ja gravado ==');
+db.templates.salvar({ chave: 'cabecalho_diario', titulo: 'Cabecalho', descricao: '',
+  corpo: '{{loja}}\n{{oriente}}\n\n📅 AGENDA DE {{data_extenso}}' });
+db.init(tmp);   // simula reabertura do app
+const cabMigrado = db.templates.obter('cabecalho_diario').corpo;
+ok('linha ficou condicional', /\{\{#tem_pauta\}\}.*AGENDA DE.*\{\{\/tem_pauta\}\}/.test(cabMigrado), cabMigrado.replace(/\n/g,' | '));
+db.init(tmp);
+ok('migracao nao duplica', (db.templates.obter('cabecalho_diario').corpo.match(/tem_pauta/g) || []).length === 2);
 
 console.log('\n'+(falhas?('FALHAS: '+falhas):'TODOS OS TESTES DE INTEGRACAO PASSARAM'));
 process.exit(falhas?1:0);

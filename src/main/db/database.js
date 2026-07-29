@@ -92,6 +92,24 @@ function migrar() {
   } catch (err) {
     console.warn('[db] migração de eventos habilitados:', err.message);
   }
+
+  // No resumo diario, a linha "AGENDA DE <data>" anuncia a pauta da Loja:
+  // deve sair apenas quando existe sessao com Agenda do Dia preenchida.
+  // Aqui a linha do modelo ja gravado passa a ser condicional.
+  try {
+    const t = conn.prepare("SELECT corpo FROM templates WHERE chave = 'cabecalho_diario'").get();
+    if (t && t.corpo && /AGENDA DE/i.test(t.corpo) && !/\{\{#tem_pauta\}\}/.test(t.corpo)) {
+      const novo = t.corpo.split('\n')
+        .map((linha) => (/AGENDA DE/i.test(linha)
+          ? `{{#tem_pauta}}${linha.trim()}{{/tem_pauta}}`
+          : linha))
+        .join('\n');
+      conn.prepare("UPDATE templates SET corpo = ? WHERE chave = 'cabecalho_diario'").run(novo);
+      console.log('[db] cabeçalho diário: linha "AGENDA DE" passou a depender da pauta do dia.');
+    }
+  } catch (err) {
+    console.warn('[db] migração do cabeçalho diário:', err.message);
+  }
 }
 
 function getConn() {

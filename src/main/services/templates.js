@@ -217,6 +217,7 @@ function variaveisDisponiveis() {
     { v: '{{evento}}', d: 'Título da data comemorativa / efeméride' },
     { v: '{{descricao}}', d: 'Descrição da data comemorativa / efeméride' },
     { v: '{{ano_origem}}', d: 'Ano do fato histórico' },
+    { v: '{{#tem_pauta}}...{{/tem_pauta}}', d: 'Só no cabeçalho do resumo diário: bloco exibido apenas quando há sessão com Agenda do Dia no dia' },
     { v: '{{#campo}}...{{/campo}}', d: 'Bloco exibido somente se o campo tiver valor' },
     { v: '{{^campo}}...{{/campo}}', d: 'Bloco exibido somente se o campo estiver vazio' }
   ];
