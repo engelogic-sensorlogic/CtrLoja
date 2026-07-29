@@ -276,6 +276,106 @@ function stop() {
   if (vigia) { clearInterval(vigia); vigia = null; }
 }
 
+/**
+ * Checklist do disparo, sem enviar nada.
+ * Responde objetivamente: o que falta para a rotina automatica funcionar?
+ */
+function diagnosticoDisparo() {
+  const hoje = cal.hojeISO();
+  const modo = db.config.obter('disparo_modo', 'revisao');
+  const { h, m } = horaConfigurada();
+  const horario = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+
+  const st = whatsapp.status();
+  const grupos = db.grupos.selecionados();
+
+  let fila = { total: 0, total_selecionados: 0, itens: [] };
+  try { fila = agenda.montarFila(hoje); } catch { /* ignora */ }
+
+  const bloqueadosPorTipo = fila.itens.filter(
+    (i) => !i.selecionado && /desativado nas configurações/i.test(i.motivo_bloqueio || '')
+  ).length;
+
+  const itens = [
+    {
+      chave: 'modo',
+      rotulo: 'Modo de disparo gravado',
+      ok: modo === 'automatico',
+      valor: { revisao: 'Automático com revisão prévia', automatico: '100% automático', manual: 'Somente manual' }[modo] || modo,
+      dica: modo === 'automatico'
+        ? null
+        : 'Selecione "100% automático" em Configurações e clique em SALVAR CONFIGURAÇÕES. Sem salvar, a escolha não vale.'
+    },
+    {
+      chave: 'dia',
+      rotulo: 'Hoje é dia habilitado',
+      ok: hojeEhDiaHabilitado(),
+      valor: hojeEhDiaHabilitado() ? 'sim' : 'não',
+      dica: hojeEhDiaHabilitado() ? null : 'Marque o dia da semana em "Dias da semana em que a rotina roda".'
+    },
+    {
+      chave: 'horario',
+      rotulo: 'Horário programado',
+      ok: true,
+      valor: `${horario} — ${horarioJaPassou() ? 'já passou hoje' : 'ainda não chegou'}`,
+      dica: null
+    },
+    {
+      chave: 'whatsapp',
+      rotulo: 'WhatsApp conectado',
+      ok: st.estado === 'pronto',
+      valor: st.estado,
+      dica: st.estado === 'pronto' ? null : 'Conecte na aba WhatsApp. O modo automático exige a conexão ativa no horário.'
+    },
+    {
+      chave: 'grupos',
+      rotulo: 'Grupos de destino salvos',
+      ok: grupos.length > 0,
+      valor: grupos.length ? grupos.map((g) => g.nome).join(', ') : 'nenhum',
+      dica: grupos.length ? null : 'Na aba WhatsApp, marque os grupos e clique em SALVAR SELEÇÃO.'
+    },
+    {
+      chave: 'eventos',
+      rotulo: 'Eventos na data de hoje',
+      ok: fila.total > 0,
+      valor: `${fila.total} evento(s)`,
+      dica: fila.total ? null : 'Não há nada a comunicar hoje. Isto não é erro: a rotina só envia quando existe evento.'
+    },
+    {
+      chave: 'selecionados',
+      rotulo: 'Eventos liberados para envio',
+      ok: fila.total_selecionados > 0,
+      valor: `${fila.total_selecionados} de ${fila.total}`,
+      dica: fila.total_selecionados
+        ? null
+        : (bloqueadosPorTipo
+          ? `${bloqueadosPorTipo} evento(s) bloqueado(s) por tipo desativado em "Tipos de evento habilitados para envio".`
+          : 'Nenhum evento liberado. Verifique Obreiros Adormecidos e datas marcadas como "não enviar".')
+    },
+    {
+      chave: 'ja_disparado',
+      rotulo: 'Disparo de hoje ainda não realizado',
+      ok: !db.envios.jaDisparado(hoje),
+      valor: db.envios.jaDisparado(hoje) ? 'já disparado hoje' : 'pendente',
+      dica: db.envios.jaDisparado(hoje)
+        ? 'A rotina não repete o disparo no mesmo dia. Use "Forçar disparo" se precisar reenviar.'
+        : null
+    }
+  ];
+
+  const pendencias = itens.filter((i) => !i.ok && i.dica);
+
+  return {
+    data: hoje,
+    modo,
+    itens,
+    pronto: pendencias.length === 0,
+    resumo: pendencias.length
+      ? `Faltam ${pendencias.length} ponto(s): ${pendencias.map((p) => p.rotulo).join('; ')}.`
+      : 'Tudo pronto: a rotina automática vai disparar no horário.'
+  };
+}
+
 function estadoRotina() {
   return {
     ...situacao,
@@ -289,5 +389,5 @@ function estadoRotina() {
 
 module.exports = {
   start, stop, reagendar, executar, verificarPendencia, aoWhatsappPronto,
-  expressaoCron, estadoRotina, lerLog, log
+  expressaoCron, estadoRotina, diagnosticoDisparo, lerLog, log
 };

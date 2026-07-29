@@ -111,6 +111,44 @@ App.views.config = {
       ])
     ]);
 
+    /* --------- Checklist do disparo --------- */
+    const boxCheck = el('div');
+
+    async function pintarCheck() {
+      const d = await tentar(window.api.rotina.diagnostico()) || { itens: [] };
+      boxCheck.innerHTML = '';
+
+      boxCheck.appendChild(el('div', {
+        class: d.pronto ? 'aviso info' : 'aviso',
+        style: 'font-size:13px',
+        text: d.resumo || ''
+      }));
+
+      const tbody = el('tbody');
+      for (const i of d.itens) {
+        tbody.appendChild(el('tr', {}, [
+          el('td', {
+            style: `width:34px;font-size:16px;color:${i.ok ? 'var(--c-ok)' : 'var(--c-erro)'}`,
+            text: i.ok ? '✓' : '✗'
+          }),
+          el('td', { style: 'font-weight:600;width:250px', text: i.rotulo }),
+          el('td', {}, [
+            el('div', { text: i.valor }),
+            i.dica ? el('small', { style: 'color:var(--c-erro)', text: i.dica }) : null
+          ])
+        ]));
+      }
+      boxCheck.appendChild(el('table', {}, [tbody]));
+    }
+
+    const cardCheck = el('div', { class: 'cartao' }, [
+      el('h3', { text: 'O disparo automático vai funcionar? — verificação item a item' }),
+      boxCheck,
+      el('div', { class: 'linha compacta', style: 'margin-top:12px' }, [
+        el('button', { class: 'btn secundario', text: '🔄 Verificar novamente', onclick: () => pintarCheck() })
+      ])
+    ]);
+
     /* --------- Situação da rotina --------- */
     const boxRotina = el('div');
     const cardRotina = el('div', { class: 'cartao' }, [
@@ -243,13 +281,37 @@ App.views.config = {
     /* --------- Montagem --------- */
     const form = el('form', { id: 'formConfig' }, [cardLoja, cardTitulos, cardDisparo, cardEventos]);
 
+    const avisoPendente = el('div', {
+      class: 'aviso', style: 'display:none',
+      text: 'Há alterações não salvas. Clique em "Salvar configurações" para que passem a valer.'
+    });
+
+    let alterado = false;
+    function marcarPendencia() {
+      avisoPendente.style.display = alterado ? '' : 'none';
+      btnSalvarRodape.classList.toggle('perigo', alterado);
+      btnSalvarRodape.textContent = alterado ? '💾 Salvar configurações (pendente)' : '💾 Salvar configurações';
+    }
+
+    const btnSalvarRodape = el('button', { class: 'btn', text: '💾 Salvar configurações', onclick: () => salvarConfig() });
+
+    form.addEventListener('input', () => { alterado = true; marcarPendencia(); });
+    form.addEventListener('change', () => { alterado = true; marcarPendencia(); });
+
+    form.appendChild(el('div', { class: 'cartao' }, [
+      avisoPendente,
+      el('div', { class: 'linha compacta' }, [btnSalvarRodape])
+    ]));
+
     alvo.innerHTML = '';
     alvo.appendChild(form);
+    alvo.appendChild(cardCheck);
     alvo.appendChild(cardRotina);
     alvo.appendChild(cardBanco);
+    await pintarCheck();
     await pintarRotina();
 
-    acaoTopo('Salvar configurações', async () => {
+    async function salvarConfig() {
       const fd = new FormData(form);
       const mapa = {};
       for (const [k, v] of fd.entries()) mapa[k] = v;
@@ -259,7 +321,16 @@ App.views.config = {
       mapa.eventos_habilitados = JSON.stringify(checksEventos.filter((c) => c.checked).map((c) => c.value));
 
       const novo = await tentar(window.api.config.salvar(mapa), 'Falha ao salvar configurações');
-      if (novo) { App.config = novo; toast('Configurações salvas.', 'ok'); pintarRotina(); }
-    }, '');
+      if (novo) {
+        App.config = novo;
+        alterado = false;
+        marcarPendencia();
+        toast('Configurações salvas.', 'ok');
+        pintarRotina();
+        pintarCheck();
+      }
+    }
+
+    acaoTopo('💾 Salvar configurações', salvarConfig, '');
   }
 };

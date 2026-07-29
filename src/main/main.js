@@ -274,6 +274,7 @@ handle('rotina:estado', () => scheduler.estadoRotina());
 handle('rotina:executar', (forcar) => scheduler.executar({ origem: 'execução manual', forcar: !!forcar }));
 handle('rotina:verificar', () => scheduler.verificarPendencia('verificação manual', false));
 handle('rotina:log', (limite) => scheduler.lerLog(limite || 200));
+handle('rotina:diagnostico', () => scheduler.diagnosticoDisparo());
 
 /* ------------------------------------------------------------------ */
 /* IPC - WhatsApp                                                      */

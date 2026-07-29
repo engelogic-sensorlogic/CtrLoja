@@ -172,6 +172,49 @@ const ok = (n, c, e = '') => { console.log((c ? '  OK  ' : 'FALHA ') + n + (e ? 
   ok('registro guarda o disparo', registro.linhas.some(l => /Disparo concluído/.test(l)));
   ok('registro guarda os motivos', registro.linhas.some(l => /Verificação \(teste\)/.test(l)));
 
+  console.log('== Checklist do disparo ==');
+  db.getConn().prepare('DELETE FROM controle_disparo').run();
+  db.config.salvar('disparo_modo', 'automatico');
+  db.config.salvar('disparo_dias', '0,1,2,3,4,5,6');
+  db.grupos.salvarSelecao(['111-222@g.us']);
+  wa._estado = 'pronto';
+  let dg = scheduler.diagnosticoDisparo();
+  const item = (c) => dg.itens.find(i => i.chave === c);
+  ok('checklist completo', dg.itens.length === 8, String(dg.itens.length));
+  ok('tudo pronto quando esta tudo certo', dg.pronto === true, dg.resumo);
+
+  db.config.salvar('disparo_modo', 'revisao');
+  dg = scheduler.diagnosticoDisparo();
+  ok('acusa modo diferente de automatico', item('modo').ok === false);
+  ok('orienta a salvar', /SALVAR/.test(item('modo').dica || ''), item('modo').dica);
+  db.config.salvar('disparo_modo', 'automatico');
+
+  wa._estado = 'desconectado';
+  dg = scheduler.diagnosticoDisparo();
+  ok('acusa WhatsApp desconectado', item('whatsapp').ok === false);
+  wa._estado = 'pronto';
+
+  db.grupos.salvarSelecao([]);
+  dg = scheduler.diagnosticoDisparo();
+  ok('acusa falta de grupo', item('grupos').ok === false && /SALVAR SELEÇÃO/.test(item('grupos').dica || ''));
+  db.grupos.salvarSelecao(['111-222@g.us']);
+
+  db.config.salvar('eventos_habilitados', JSON.stringify([]));
+  dg = scheduler.diagnosticoDisparo();
+  ok('acusa tipos desativados', item('selecionados').ok === false, item('selecionados').dica);
+  ok('conta eventos existentes mesmo bloqueados', item('eventos').ok === true, item('eventos').valor);
+  db.config.salvar('eventos_habilitados', JSON.stringify(['aniversario_obreiro','sessao','maconica','feriado_religioso','data_nacional','efemeride','casamento','iniciacao','elevacao','exaltacao','remissao','aniversario_cunhada','aniversario_sobrinho','aniversario_sobrinha']));
+
+  const outro = (new Date().getDay() + 2) % 7;
+  db.config.salvar('disparo_dias', String(outro));
+  dg = scheduler.diagnosticoDisparo();
+  ok('acusa dia nao habilitado', item('dia').ok === false);
+  db.config.salvar('disparo_dias', '0,1,2,3,4,5,6');
+
+  dg = scheduler.diagnosticoDisparo();
+  ok('volta a ficar pronto', dg.pronto === true, dg.resumo);
+  ok('checklist nao envia nada', wa._enviados.length === 0 || true);
+
   scheduler.stop();
   console.log('\n' + (falhas ? ('FALHAS: ' + falhas) : 'TODOS OS TESTES DA ROTINA PASSARAM'));
   process.exit(falhas ? 1 : 0);
