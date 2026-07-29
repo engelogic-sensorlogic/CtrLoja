@@ -199,5 +199,55 @@ ok('sessao removida', !db.sessoes.obterPorData('2026-07-13'));
 backup.importar(arq2,'substituir');
 ok('sessao restaurada pelo backup', !!db.sessoes.obterPorData('2026-07-13'));
 
+console.log('== Modo agrupado: so eventos com conteudo ==');
+db.config.salvar('agrupar_mensagens', '1');
+
+// dia com sessao SEM pauta + aniversario
+db.sessoes.salvar({ data: '2026-07-27', grau: 'Aprendiz', tipo: 'Economica' });   // segunda, sem pauta
+const oAgr = db.obreiros.salvar({ nome: 'Irmão do Agrupado', tratamento: 'Ir.∴', grau: 'Mestre',
+  situacao: 'Ativo', dt_nascimento: '1975-07-27' });
+let fAgr = agenda.montarFila('2026-07-27');
+ok('sessao sem pauta fica fora', fAgr.itens.some(i => i.tipo === 'sessao' && /sem Agenda do Dia/.test(i.fora_do_agrupamento || '')));
+ok('mensagem unica existe (tem o aniversario)', !!fAgr.mensagem_unica);
+ok('mensagem nao traz a convocacao', !/CONVOCAÇÃO/.test(fAgr.mensagem_unica));
+ok('mensagem traz o aniversariante', /Irmão do Agrupado/.test(fAgr.mensagem_unica));
+
+console.log('== Cabecalho da Loja aparece uma vez so ==');
+const ocorrencias = (fAgr.mensagem_unica.match(/União Fraternal Rolandense/g) || []).length;
+ok('nome da Loja nao se repete', ocorrencias === 1, String(ocorrencias));
+const chanc = (fAgr.mensagem_unica.match(/Esta Chancelaria informa/g) || []).length;
+ok('linha fixa do cabecalho nao se repete', chanc <= 1, String(chanc));
+ok('cabecalho AGENDA DE presente', /AGENDA DE/.test(fAgr.mensagem_unica));
+console.log('\n--- mensagem agrupada ---\n' + fAgr.mensagem_unica + '\n-------------------------');
+
+console.log('== Dia so com sessao sem pauta: nada a enviar ==');
+db.obreiros.excluir(oAgr.id);
+fAgr = agenda.montarFila('2026-07-27');
+ok('ha evento selecionado', fAgr.total_selecionados === 1, String(fAgr.total_selecionados));
+ok('mas nao ha mensagem agrupada', fAgr.mensagem_unica === null);
+ok('total para envio zerado', fAgr.total_para_envio === 0, String(fAgr.total_para_envio));
+
+console.log('== Sessao COM pauta volta a entrar ==');
+db.sessoes.salvar({ data: '2026-07-27', grau: 'Aprendiz', tipo: 'Economica', agenda_dia: '1. Abertura\n2. Instrucao' });
+fAgr = agenda.montarFila('2026-07-27');
+ok('sessao com pauta entra', !!fAgr.mensagem_unica && /Instrucao/.test(fAgr.mensagem_unica));
+ok('total para envio = 1', fAgr.total_para_envio === 1);
+
+console.log('== Modo individual nao muda ==');
+db.config.salvar('agrupar_mensagens', '0');
+db.sessoes.salvar({ data: '2026-07-27', grau: 'Aprendiz', tipo: 'Economica' });   // volta sem pauta
+const fInd = agenda.montarFila('2026-07-27');
+const sesInd = fInd.itens.find(i => i.tipo === 'sessao');
+ok('sessao sem pauta continua sendo enviada avulsa', sesInd.selecionado === true && !sesInd.fora_do_agrupamento);
+ok('convocacao mantem o cabecalho da Loja', /União Fraternal Rolandense/.test(sesInd.mensagem));
+
+console.log('== Utilitarios de conteudo ==');
+const tplMod = require(path.join(raiz, 'services/templates.js'));
+const cabTeste = ['*A∴R∴L∴S∴ União Fraternal Rolandense nº 141*', '_Oriente de Rolândia - PR_', 'Esta Chancelaria informa ...'];
+ok('detecta bloco vazio', tplMod.temConteudo('*A∴R∴L∴S∴ União Fraternal Rolandense nº 141*\n_Oriente de Rolândia - PR_\n\n*T∴F∴A∴*') === false);
+ok('detecta bloco com texto', tplMod.temConteudo('*A∴R∴L∴S∴ União Fraternal Rolandense nº 141*\n\nParabéns!') === true);
+ok('remove linha fixa do cabecalho diario', tplMod.removerCabecalhoLoja('Esta Chancelaria informa ...\n\nTexto útil', cabTeste) === 'Texto útil');
+ok('remove cabecalho', tplMod.removerCabecalhoLoja('*A∴R∴L∴S∴ União Fraternal Rolandense nº 141*\n_Oriente de Rolândia - PR_\n\nTexto').startsWith('Texto'));
+
 console.log('\n'+(falhas?('FALHAS: '+falhas):'TODOS OS TESTES DE INTEGRACAO PASSARAM'));
 process.exit(falhas?1:0);

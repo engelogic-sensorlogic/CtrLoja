@@ -87,10 +87,32 @@ function pintarFila(painel, fila, recarregar) {
   const estado = fila.itens.map((i) => ({ ...i }));
 
   /* --------- Modo agrupado --------- */
-  if (fila.agrupar && fila.mensagem_unica) {
+  if (fila.agrupar) {
+    const excluidos = fila.itens.filter((i) => i.selecionado && i.fora_do_agrupamento);
+
+    if (!fila.mensagem_unica) {
+      painel.appendChild(el('div', { class: 'cartao' }, [
+        el('h3', { text: 'Mensagem única do dia (modo agrupado)' }),
+        el('div', {
+          class: 'aviso',
+          html: 'Nenhum evento do dia tem conteúdo próprio para compor a mensagem — '
+            + '<strong>nada será enviado</strong>.'
+        }),
+        excluidos.length ? el('ul', {
+          style: 'font-size:12.5px;color:var(--c-texto-suave)',
+          html: excluidos.map((i) => `<li>${esc(i.nome || i.evento || '')} — ${esc(i.fora_do_agrupamento)}</li>`).join('')
+        }) : null
+      ]));
+      return;
+    }
+
     const ta = el('textarea', { class: 'fila-msg', style: 'min-height:320px' }, [fila.mensagem_unica]);
     painel.appendChild(el('div', { class: 'cartao' }, [
       el('h3', { text: 'Mensagem única do dia (modo agrupado)' }),
+      excluidos.length ? el('div', {
+        class: 'aviso info',
+        html: 'Fora do agrupamento: ' + excluidos.map((i) => `<strong>${esc(i.nome || i.evento || '')}</strong> (${esc(i.fora_do_agrupamento)})`).join(', ')
+      }) : null,
       ta
     ]));
     painel.appendChild(barraEnvio(async () => ({

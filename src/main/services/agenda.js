@@ -273,13 +273,48 @@ function montarFila(isoData) {
     };
   });
 
+  /* --------------------------------------------------------------- */
+  /* Mensagem unica (modo agrupado)                                    */
+  /*                                                                   */
+  /* Regras:                                                           */
+  /*  - sessao sem Agenda do Dia preenchida nao entra: no resumo do    */
+  /*    dia ela nao acrescenta informacao;                             */
+  /*  - o cabecalho da Loja aparece uma unica vez, no topo;            */
+  /*  - blocos sem conteudo proprio sao descartados, para nao gerar    */
+  /*    separadores soltos;                                            */
+  /*  - sem nenhum bloco de conteudo, nao ha mensagem agrupada.        */
+  /* --------------------------------------------------------------- */
+
   let mensagemUnica = null;
-  if (agrupar && itens.some((i) => i.selecionado)) {
+
+  if (agrupar) {
     const cabecalho = db.templates.obter('cabecalho_diario');
     const head = cabecalho ? tpl.renderizar(cabecalho.corpo, tpl.contextoBase(data)) : '';
-    mensagemUnica = [head, ...itens.filter((i) => i.selecionado).map((i) => i.mensagem)]
-      .filter(Boolean)
-      .join('\n\n———————————————\n\n');
+
+    // Tudo que ja aparece no cabecalho do resumo nao se repete nos blocos
+    const linhasDoCabecalho = head.split('\n');
+
+    const blocos = [];
+
+    for (const item of itens) {
+      if (!item.selecionado) continue;
+
+      if (item.tipo === 'sessao' && !String(item.agenda_dia || '').trim()) {
+        item.fora_do_agrupamento = 'Sessão sem Agenda do Dia preenchida';
+        continue;
+      }
+
+      const corpo = tpl.removerCabecalhoLoja(item.mensagem, linhasDoCabecalho);
+      if (!tpl.temConteudo(corpo, linhasDoCabecalho)) {
+        item.fora_do_agrupamento = 'Mensagem sem conteúdo próprio';
+        continue;
+      }
+      blocos.push(corpo);
+    }
+
+    if (blocos.length) {
+      mensagemUnica = [head, ...blocos].filter(Boolean).join('\n\n———————————————\n\n');
+    }
   }
 
   return {
@@ -291,6 +326,11 @@ function montarFila(isoData) {
     itens,
     total: itens.length,
     total_selecionados: itens.filter((i) => i.selecionado).length,
+    // No modo agrupado o que vai ao grupo e uma unica mensagem - e ela pode
+    // nao existir, se nenhum evento tiver conteudo proprio.
+    total_para_envio: agrupar
+      ? (mensagemUnica ? 1 : 0)
+      : itens.filter((i) => i.selecionado).length,
     ja_disparado: db.envios.jaDisparado(data)
   };
 }

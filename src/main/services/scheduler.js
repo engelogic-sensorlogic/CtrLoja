@@ -144,15 +144,19 @@ async function executar(opts = {}) {
     }
 
     const fila = agenda.montarFila(hoje);
-    if (!fila.total_selecionados) {
-      situacao.ultimo_resultado = `Nenhum evento a comunicar em ${cal.formatarBR(hoje)}.`;
+    const paraEnviar = fila.total_para_envio !== undefined ? fila.total_para_envio : fila.total_selecionados;
+
+    if (!paraEnviar) {
+      situacao.ultimo_resultado = (fila.agrupar && fila.total_selecionados)
+        ? `Modo agrupado: nenhum evento com conteúdo próprio em ${cal.formatarBR(hoje)}. Nada foi enviado.`
+        : `Nenhum evento a comunicar em ${cal.formatarBR(hoje)}.`;
       situacao.adiado_por_whatsapp = false;
       log(situacao.ultimo_resultado);
       return { ignorado: 'sem_eventos' };
     }
 
     if (modo === 'revisao' && !opts.forcar) {
-      situacao.ultimo_resultado = `${fila.total_selecionados} mensagem(ns) aguardando revisão.`;
+      situacao.ultimo_resultado = `${paraEnviar} mensagem(ns) aguardando revisão.`;
       log(`${situacao.ultimo_resultado} (${origem})`);
       callbacks.onFila(fila);
       return { revisao: true, total: fila.total_selecionados };
@@ -180,7 +184,8 @@ async function executar(opts = {}) {
       return { erro: 'sem_grupos' };
     }
 
-    log(`Disparando ${fila.total_selecionados} mensagem(ns) para ${fila.grupos.length} grupo(s) — origem: ${origem}.`);
+    log(`Disparando ${paraEnviar} mensagem(ns)${fila.agrupar ? ' (modo agrupado)' : ''} `
+      + `para ${fila.grupos.length} grupo(s) — origem: ${origem}.`);
 
     const res = await whatsapp.enviarFila({
       data: hoje,

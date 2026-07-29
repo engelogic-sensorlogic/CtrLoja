@@ -126,6 +126,59 @@ function montarMensagem(evento) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Apoio ao modo agrupado                                              */
+/* ------------------------------------------------------------------ */
+
+const normalizar = (t) => String(t || '').replace(/[*_~`]/g, '').trim().toLowerCase();
+
+/**
+ * Linhas de cabecalho que se repetem em todo modelo (nome da Loja, Oriente...).
+ * No modo agrupado elas aparecem uma unica vez, no topo da mensagem.
+ */
+function linhasDeCabecalho() {
+  const cfg = db.config.obterTodas();
+  return [cfg.loja_nome, cfg.oriente, cfg.potencia, cfg.loja_sigla]
+    .filter(Boolean)
+    .map(normalizar);
+}
+
+/**
+ * Remove o cabecalho repetido do inicio de uma mensagem ja renderizada.
+ *
+ * @param extras linhas adicionais a considerar cabecalho - normalmente as do
+ *               modelo "cabecalho_diario", o que elimina tambem frases fixas
+ *               de chancelaria que se repetiriam em todos os blocos.
+ */
+function removerCabecalhoLoja(mensagem, extras = []) {
+  const cab = new Set([
+    ...linhasDeCabecalho(),
+    ...[].concat(extras).map(normalizar).filter(Boolean)
+  ]);
+  const linhas = String(mensagem || '').split('\n');
+  let i = 0;
+  while (i < linhas.length) {
+    const n = normalizar(linhas[i]);
+    if (n === '' || cab.has(n)) i += 1;
+    else break;
+  }
+  return linhas.slice(i).join('\n').trim();
+}
+
+/**
+ * A mensagem tem conteudo proprio?
+ * Um bloco formado so pelo cabecalho da Loja, pela saudacao final ou por
+ * enfeites nao deve entrar na mensagem agrupada - viraria separador solto.
+ */
+function temConteudo(mensagem, extras = []) {
+  const restante = removerCabecalhoLoja(mensagem, extras)
+    .replace(/T∴F∴A∴/g, '')
+    .replace(/S∴F∴U∴/g, '')
+    .replace(/[*_~`\s—–\-•·|]/g, '')
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '');
+  return restante.length > 0;
+}
+
+/* ------------------------------------------------------------------ */
 /* Apoio a interface                                                   */
 /* ------------------------------------------------------------------ */
 
@@ -199,5 +252,6 @@ function preview(corpo, chave) {
 
 module.exports = {
   renderizar, montarMensagem, montarContexto, contextoBase,
-  tituloDe, variaveisDisponiveis, preview, saudacaoPorHora
+  tituloDe, variaveisDisponiveis, preview, saudacaoPorHora,
+  removerCabecalhoLoja, temConteudo
 };
