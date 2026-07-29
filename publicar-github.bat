@@ -58,13 +58,54 @@ REM ------------------------------------------------------------------
 REM  Situacao do repositorio
 REM ------------------------------------------------------------------
 echo [2/4] Conferindo o repositorio...
+echo       Pasta: %CD%
 
-git rev-parse --is-inside-work-tree >nul 2>&1
-if errorlevel 1 (
-  echo [ERRO] Esta pasta nao e um repositorio Git.
-  pause
-  exit /b 1
+git rev-parse --is-inside-work-tree >nul 2>"%TEMP%\ctrloja-git-erro.txt"
+if not errorlevel 1 goto :REPO_OK
+
+REM ------------------------------------------------------------------
+REM  O Git recusa repositorios cujo dono seja outro usuario. Isso ocorre
+REM  sempre que a pasta esta em unidade de rede/mapeada, como o Z:.
+REM  A mensagem e "detected dubious ownership".
+REM ------------------------------------------------------------------
+findstr /i /c:"dubious ownership" /c:"safe.directory" "%TEMP%\ctrloja-git-erro.txt" >nul 2>&1
+if errorlevel 1 goto :REPO_ERRO
+
+echo.
+echo       O Git bloqueou a pasta por estar em unidade de rede
+echo       ^(verificacao de propriedade do repositorio^).
+echo       Liberando esta pasta especifica...
+
+set "PASTA=%CD%"
+set "PASTABARRA=%PASTA:\=/%"
+git config --global --add safe.directory "%PASTA%"       >nul 2>&1
+git config --global --add safe.directory "%PASTABARRA%"  >nul 2>&1
+git config --global --add safe.directory "%~dp0."        >nul 2>&1
+
+git rev-parse --is-inside-work-tree >nul 2>"%TEMP%\ctrloja-git-erro.txt"
+if errorlevel 1 goto :REPO_ERRO
+
+echo       Liberado. Seguindo.
+goto :REPO_OK
+
+:REPO_ERRO
+echo.
+echo [ERRO] O Git nao conseguiu abrir esta pasta como repositorio.
+echo.
+echo   Mensagem do Git:
+type "%TEMP%\ctrloja-git-erro.txt" 2>nul
+echo.
+if not exist ".git" (
+  echo   A pasta .git nao existe aqui - o repositorio nao foi inicializado
+  echo   nesta pasta. Confirme que o publicar-github.bat esta na raiz do
+  echo   projeto, junto do package.json.
 )
+echo.
+pause
+exit /b 1
+
+:REPO_OK
+del /q "%TEMP%\ctrloja-git-erro.txt" >nul 2>&1
 
 for /f "tokens=*" %%r in ('git config --get remote.origin.url 2^>nul') do set "ORIGEM=%%r"
 if not defined ORIGEM (
