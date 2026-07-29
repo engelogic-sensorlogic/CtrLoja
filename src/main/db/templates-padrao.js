@@ -8,7 +8,7 @@
  * textos na tela "Modelos" e rodar a ferramenta novamente, em vez de
  * alterar este arquivo a mao.
  *
- * Gerado em: 29/07/2026, 09:12:48
+ * Gerado em: 29/07/2026, 09:58:08
  * Total de modelos: 15
  */
 
@@ -272,7 +272,6 @@ Esta Chancelaria informa ...
 🏛️ CONVOCAÇÃO — SESSÃO {{tipo_sessao}}
 
 Meus Irmãos,
-
 Nossa agenda para hoje, Sessão {{tipo_sessao}} no Grau de {{grau}}, {{data_extenso}}{{#hora_sessao}}, às {{hora_sessao}}{{/hora_sessao}}.
 
 {{#agenda_dia}}ORDEM DO DIA

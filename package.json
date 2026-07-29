@@ -20,12 +20,12 @@
     "dist": "electron-builder --win --x64"
   },
   "dependencies": {
+    "baileys": "7.0.0-rc13",
     "node-cron": "^3.0.3",
     "qrcode": "^1.5.4"
   },
   "optionalDependencies": {
-    "better-sqlite3": "^11.10.0",
-    "baileys": "7.0.0-rc13"
+    "better-sqlite3": "^11.10.0"
   },
   "devDependencies": {
     "electron": "^37.10.3",
@@ -41,18 +41,32 @@
     },
     "files": [
       "src/**/*",
-      "package.json"
+      "package.json",
+      "!**/*.map",
+      "!**/test/**",
+      "!**/ferramentas/**"
+    ],
+    "extraFiles": [
+      {
+        "from": ".",
+        "to": ".",
+        "filter": [
+          "Logo1.*",
+          "Logo2.*",
+          "build/icon.ico"
+        ]
+      }
     ],
     "win": {
       "target": [
         "dir"
       ],
-      "icon": "build/icon.ico"
+      "icon": "build/icon.ico",
+      "artifactName": "${productName}-${version}.${ext}"
     },
     "asar": true,
     "asarUnpack": [
-      "**/node_modules/better-sqlite3/**",
-      "**/node_modules/puppeteer*/**"
+      "**/node_modules/better-sqlite3/**"
     ]
   }
 }

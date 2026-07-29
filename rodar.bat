@@ -7,16 +7,15 @@ REM ===================================================================
 REM  CtrLoja - Executa o aplicativo direto do codigo-fonte
 REM
 REM  Uso:
-REM    rodar.bat              -> MODO INTERFACE (rapido)
-REM                              instala so o essencial, sem modulo nativo
-REM                              e sem baixar o Chromium do WhatsApp.
-REM                              Toda a interface, o banco, a agenda e os
-REM                              modelos funcionam. O envio pelo WhatsApp
-REM                              fica indisponivel.
+REM    rodar.bat              -> MODO PADRAO
+REM                              instala tudo, inclusive a integracao com
+REM                              o WhatsApp (Baileys), sem compilar o
+REM                              modulo nativo do banco. Usa o SQLite
+REM                              embutido no Electron.
 REM
 REM    rodar.bat completo     -> MODO COMPLETO
-REM                              instala tudo, inclusive a integracao com
-REM                              o WhatsApp (download maior na 1a vez).
+REM                              o mesmo, tentando ainda compilar o
+REM                              better-sqlite3 (banco um pouco mais rapido).
 REM
 REM    rodar.bat local        -> COPIA o projeto para uma pasta local do
 REM                              usuario e roda de la. Use quando o projeto

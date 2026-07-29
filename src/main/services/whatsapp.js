@@ -35,8 +35,8 @@ const INSTALADO = (() => {
     require.resolve('baileys');
     return true;
   } catch {
-    console.log('[ctrloja] Modo interface: integração com o WhatsApp não instalada '
-      + '(use "rodar-completo.bat" para habilitar o envio real).');
+    console.log('[ctrloja] Biblioteca "baileys" ausente: execute "npm install" '
+      + 'na pasta do aplicativo para habilitar o envio pelo WhatsApp.');
     return false;
   }
 })();

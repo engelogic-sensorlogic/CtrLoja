@@ -18,11 +18,10 @@ REM ===================================================================
 
 echo.
 echo ===================================================================
-echo   CtrLoja - MODO COMPLETO (com integracao WhatsApp)
+echo   CtrLoja - MODO COMPLETO (com banco nativo compilado)
 echo ===================================================================
 echo.
 echo   Requisitos:
-echo     - Google Chrome ou Microsoft Edge instalado
 echo     - Internet no computador
 echo     - Celular com o WhatsApp da Loja por perto (leitura do QR Code)
 echo.

@@ -54,8 +54,8 @@ Basta dar dois cliques no **`rodar.bat`**:
 
 | Comando | O que faz |
 |---------|-----------|
-| `rodar.bat` | **Modo interface** (padrão, rápido). Instala só o essencial — sem compilar módulo nativo e sem baixar o Chromium. Interface, banco, agenda, calendário e modelos funcionam; o envio pelo WhatsApp fica indisponível. |
-| **`rodar-completo.bat`** | **Modo completo** com a integração do WhatsApp. Atalho de duplo clique (equivale a `rodar.bat completo`). |
+| `rodar.bat` | **Modo padrão.** Instala tudo, inclusive a integração com o WhatsApp, sem compilar o módulo nativo do banco (usa o SQLite embutido no Electron). |
+| **`rodar-completo.bat`** | O mesmo, executando do disco local e tentando compilar o `better-sqlite3`. |
 | `rodar.bat local` | Copia o projeto para uma pasta local e roda de lá. Use quando o projeto estiver em unidade de rede/mapeada. |
 | `rodar.bat testes` | Executa apenas os testes automatizados. |
 
@@ -75,16 +75,34 @@ npm start
 ## Geração do instalador
 
 ```bat
-build.bat            :: instala dependências, empacota e gera o instalador
+build.bat            :: processo completo (recomendado)
 build.bat app        :: apenas empacota (dist\win-unpacked)
 build.bat setup      :: apenas compila o instalador (installer\CtrLoja.iss)
 build.bat limpar     :: remove dist, node_modules e installer\Output
 ```
 
+O `build.bat` executa, em ordem: localiza o Node.js, confere o ícone, instala **todas**
+as dependências (inclusive o Baileys), prepara o módulo nativo, **roda os testes
+automatizados** (build é interrompido se algum falhar), empacota, **verifica se a
+integração do WhatsApp entrou no pacote** e compila o instalador.
+
 Saídas:
 
 - `dist\win-unpacked\CtrLoja.exe` — aplicativo empacotado
 - `installer\Output\CtrLoja-Setup-1.0.0.exe` — instalador
+
+**O instalador é autônomo.** O computador de destino não precisa de Node.js, navegador
+ou qualquer pré-requisito: o Electron, o banco de dados e a integração com o WhatsApp
+vão dentro do pacote.
+
+### Ícone
+
+`build/icon.ico` (esquadro e compasso sobre fundo azul, nos tamanhos 16 a 256 px) é usado em:
+
+- janela do aplicativo e barra de tarefas
+- arquivo do instalador (`CtrLoja-Setup-1.0.0.exe`)
+- atalho da Área de Trabalho, do Menu Iniciar e da inicialização do Windows
+- lista de programas instalados do Windows
 
 ---
 
