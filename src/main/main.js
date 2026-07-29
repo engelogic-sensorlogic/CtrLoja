@@ -12,6 +12,11 @@ const scheduler = require('./services/scheduler');
 const whatsapp = require('./services/whatsapp');
 
 const isDev = process.argv.includes('--dev');
+
+// Atalho de inicializacao do Windows abre minimizado, para nao atrapalhar
+// quem acabou de ligar o computador. A rotina de disparo roda normalmente.
+const iniciarMinimizado = process.argv.includes('--minimizado');
+
 let mainWindow = null;
 
 /* ------------------------------------------------------------------ */
@@ -71,7 +76,14 @@ function createWindow() {
 
   Menu.setApplicationMenu(null);
   mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
-  mainWindow.once('ready-to-show', () => mainWindow.show());
+  mainWindow.once('ready-to-show', () => {
+    if (iniciarMinimizado) {
+      mainWindow.minimize();
+      mainWindow.showInactive();
+    } else {
+      mainWindow.show();
+    }
+  });
   if (isDev) mainWindow.webContents.openDevTools({ mode: 'detach' });
 
   mainWindow.on('closed', () => { mainWindow = null; });

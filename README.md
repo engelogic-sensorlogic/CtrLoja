@@ -121,6 +121,9 @@ sincronizar-modelos.bat "C:\caminho\CtrLoja-backup.ctrloja"
 
 O modo 100% automático exige o aplicativo **aberto** e o WhatsApp **conectado**. Para isso:
 
+- o instalador já marca **Iniciar o CtrLoja junto com o Windows**, e o atalho de inicialização
+  abre o programa **minimizado** (`--minimizado`), sem atrapalhar quem acabou de ligar o computador;
+
 - a opção *Conectar o WhatsApp automaticamente ao abrir* vem ligada;
 - se o aplicativo abrir depois do horário, a rotina **recupera** o disparo do dia;
 - se o WhatsApp ainda não estiver pronto, o envio fica pendente e é **refeito assim que conectar**;

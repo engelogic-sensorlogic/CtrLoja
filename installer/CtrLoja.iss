@@ -47,7 +47,8 @@ Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortugue
 
 [Tasks]
 Name: "desktopicon"; Description: "Criar atalho na Area de Trabalho"; GroupDescription: "Atalhos:"
-Name: "startupicon"; Description: "Iniciar o CtrLoja junto com o Windows"; GroupDescription: "Inicializacao:"; Flags: unchecked
+; Marcada por padrao: o disparo automatico exige o aplicativo aberto no horario
+Name: "startupicon"; Description: "Iniciar o CtrLoja junto com o Windows (recomendado para o disparo automatico)"; GroupDescription: "Inicializacao:"
 
 [Files]
 ; Aplicativo empacotado pelo electron-builder
@@ -66,7 +67,8 @@ Source: "{#ProjectDir}\README.md"; DestDir: "{app}"; Flags: ignoreversion skipif
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
 Name: "{group}\Desinstalar {#AppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
-Name: "{userstartup}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: startupicon
+; Na inicializacao do Windows o aplicativo abre minimizado, sem atrapalhar
+Name: "{userstartup}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Parameters: "--minimizado"; Tasks: startupicon
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "Executar o {#AppName} agora"; Flags: nowait postinstall skipifsilent
