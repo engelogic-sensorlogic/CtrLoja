@@ -22,7 +22,17 @@ App.views.agenda = {
         ]),
         el('div', { style: 'flex:1' }),
         el('div', { style: 'flex:0 0 auto' }, [
-          el('button', { class: 'btn secundario', text: '📆 Ver mês', onclick: () => verMes(seletorData.value) })
+          el('button', { class: 'btn secundario', text: '📆 Ver mês', onclick: () => verMes(seletorData.value) }),
+          el('span', { text: ' ' }),
+          el('button', {
+            class: 'btn', text: '🏛 Agenda da Loja',
+            onclick: () => {
+              const [a, m] = seletorData.value.split('-').map(Number);
+              App.sessoesAno = a;
+              App.sessoesMes = m;
+              navegar('sessoes');
+            }
+          })
         ])
       ])
     ]);

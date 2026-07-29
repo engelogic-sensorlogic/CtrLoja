@@ -12,7 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const db = require('../db/database');
 
-const TABELAS = ['obreiros', 'familiares', 'datas_calendario', 'templates', 'grupos', 'config', 'envios_log'];
+const TABELAS = ['obreiros', 'familiares', 'datas_calendario', 'templates', 'sessoes', 'grupos', 'config', 'envios_log'];
 const FORMATO = 'ctrloja-backup';
 const VERSAO = 1;
 
@@ -57,6 +57,7 @@ function importar(origem, modo = 'substituir') {
       conn.prepare('DELETE FROM familiares').run();
       conn.prepare('DELETE FROM obreiros').run();
       conn.prepare('DELETE FROM datas_calendario').run();
+      conn.prepare('DELETE FROM sessoes').run();
       conn.prepare('DELETE FROM grupos').run();
     }
 

@@ -13,7 +13,8 @@ const TIPOS_EVENTO = [
   ['feriado_religioso', 'Datas Religiosas'],
   ['data_nacional', 'Datas Nacionais / Comemorativas'],
   ['efemeride', 'Efemérides Históricas'],
-  ['maconica', 'Efemérides Maçônicas']
+  ['maconica', 'Efemérides Maçônicas'],
+  ['sessao', 'Sessões da Loja (Agenda da Loja)']
 ];
 
 const DIAS_SEMANA_CFG = [['1', 'Seg'], ['2', 'Ter'], ['3', 'Qua'], ['4', 'Qui'], ['5', 'Sex'], ['6', 'Sáb'], ['0', 'Dom']];

@@ -1,6 +1,6 @@
 'use strict';
 
-const SITUACOES = ['Ativo', 'Licenciado', 'Remido', 'Emérito', 'Falecido'];
+const SITUACOES = ['Ativo', 'Adormecido'];
 const GRAUS = ['Aprendiz', 'Companheiro', 'Mestre'];
 const TRATAMENTOS = ['Ir.∴', 'Ven.∴Ir.∴', 'M.∴I.∴', 'Ir.∴Ven.∴'];
 

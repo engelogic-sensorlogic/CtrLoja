@@ -186,6 +186,17 @@ handle('agenda:proximos', (dias) => agenda.proximosEventos(dias || 30));
 handle('agenda:fila', (isoDate) => agenda.montarFila(isoDate));
 
 /* ------------------------------------------------------------------ */
+/* IPC - Sessoes da Loja (Agenda da Loja)                              */
+/* ------------------------------------------------------------------ */
+
+handle('sessoes:listar', (filtro) => db.sessoes.listar(filtro));
+handle('sessoes:mes', (ano, mes) => agenda.sessoesDoMes(ano, mes));
+handle('sessoes:salvar', (registro) => db.sessoes.salvar(registro));
+handle('sessoes:excluir', (id) => db.sessoes.excluir(id));
+handle('sessoes:excluir-data', (data) => db.sessoes.excluirPorData(data));
+handle('sessoes:opcoes', () => ({ graus: db.GRAUS_SESSAO, tipos: db.TIPOS_SESSAO }));
+
+/* ------------------------------------------------------------------ */
 /* IPC - Templates                                                     */
 /* ------------------------------------------------------------------ */
 

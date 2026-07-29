@@ -253,6 +253,30 @@ Que a memória da nossa Ordem fortaleça a Corrente de União que nos envolve.
   },
 
   {
+    chave: 'sessao',
+    titulo: 'Sessao da Loja (Agenda da Loja)',
+    descricao: 'Disparado no dia da sessao, com grau, tipo e ordem do dia.',
+    corpo:
+`*{{loja}}*
+_{{oriente}}_
+
+🏛️ *CONVOCAÇÃO — SESSÃO {{tipo_sessao}}*
+
+Meus Irmãos,
+
+Estão convocados para a Sessão *{{tipo_sessao}}* no *Grau de {{grau}}*, hoje, {{data_extenso}}{{#hora_sessao}}, às *{{hora_sessao}}*{{/hora_sessao}}.
+
+{{#local_sessao}}📍 {{local_sessao}}{{/local_sessao}}
+
+{{#agenda_dia}}*ORDEM DO DIA*
+{{agenda_dia}}{{/agenda_dia}}
+
+Contamos com a presença de todos.
+
+*T∴F∴A∴*`
+  },
+
+  {
     chave: 'cabecalho_diario',
     titulo: 'Cabecalho do resumo diario (opcional)',
     descricao: 'Usado quando a opcao "agrupar eventos do dia em uma unica mensagem" esta ativa.',

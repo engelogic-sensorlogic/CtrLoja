@@ -39,6 +39,15 @@ contextBridge.exposeInMainWorld('api', {
     fila: (iso) => call('agenda:fila', iso)
   },
 
+  sessoes: {
+    listar: (filtro) => call('sessoes:listar', filtro),
+    mes: (ano, mes) => call('sessoes:mes', ano, mes),
+    salvar: (r) => call('sessoes:salvar', r),
+    excluir: (id) => call('sessoes:excluir', id),
+    excluirPorData: (data) => call('sessoes:excluir-data', data),
+    opcoes: () => call('sessoes:opcoes')
+  },
+
   templates: {
     listar: () => call('templates:listar'),
     salvar: (r) => call('templates:salvar', r),

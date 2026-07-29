@@ -128,6 +128,7 @@ function rotuloCategoria(c) {
     maconica: 'Maçônica',
     feriado_religioso: 'Religiosa',
     data_nacional: 'Nacional',
-    efemeride: 'Efeméride'
+    efemeride: 'Efeméride',
+    sessao: 'Sessão'
   }[c] || c;
 }

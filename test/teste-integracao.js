@@ -16,7 +16,7 @@ let falhas=0; const ok=(n,c,e='')=>{console.log((c?'  OK  ':'FALHA ')+n+(e?' -> 
 
 console.log('== Seeds ==');
 ok('config semeada', Object.keys(db.config.obterTodas()).length>=12);
-ok('templates semeados', db.templates.listar().length===14, String(db.templates.listar().length));
+ok('templates semeados', db.templates.listar().length===15, String(db.templates.listar().length));
 ok('datas semeadas', db.datas.listar().length===56, String(db.datas.listar().length));
 
 console.log('== CRUD obreiro ==');
@@ -66,7 +66,7 @@ console.log('== Tipo desabilitado ==');
 db.config.salvar('eventos_habilitados', JSON.stringify(['aniversario_obreiro']));
 const fila2=agenda.montarFila('2026-07-28');
 ok('apenas 1 selecionado', fila2.total_selecionados===1, String(fila2.total_selecionados));
-db.config.salvar('eventos_habilitados', JSON.stringify(['aniversario_obreiro','aniversario_cunhada','aniversario_sobrinho','aniversario_sobrinha','iniciacao','elevacao','exaltacao','remissao','casamento','feriado_religioso','data_nacional','efemeride','maconica']));
+db.config.salvar('eventos_habilitados', JSON.stringify(['aniversario_obreiro','aniversario_cunhada','aniversario_sobrinho','aniversario_sobrinha','iniciacao','elevacao','exaltacao','remissao','casamento','feriado_religioso','data_nacional','efemeride','maconica','sessao']));
 
 console.log('== Modo agrupado ==');
 db.config.salvar('agrupar_mensagens','1');
@@ -106,6 +106,98 @@ ok('mensagem da UFR renderiza', /141/.test(agenda.montarFila('2026-09-04').itens
 console.log('== Driver SQLite ==');
 const drv = require(path.join(raiz,'db/driver.js'));
 ok('motor identificado', ['better-sqlite3','node:sqlite'].includes(drv.motorAtual), drv.motorAtual);
+
+
+/* ================= Novas regras: Adormecido e Agenda da Loja ================= */
+console.log('== Obreiro Adormecido ==');
+const oAd = db.obreiros.salvar({ nome:'Irmão Adormecido', tratamento:'Ir.∴', grau:'Mestre', situacao:'Adormecido',
+  dt_nascimento:'1970-03-10', dt_iniciacao:'2005-03-10' });
+db.familiares.salvar({ obreiro_id:oAd.id, parentesco:'cunhada', nome:'Cunhada do Adormecido', dt_nascimento:'1972-03-10' });
+db.familiares.salvar({ obreiro_id:oAd.id, parentesco:'sobrinha', nome:'Sobrinha do Adormecido', dt_nascimento:'2008-03-10' });
+
+const evAd = agenda.eventosDoDia('2026-03-10');
+ok('eventos do adormecido aparecem na agenda', evAd.length >= 4, String(evAd.length));
+ok('todos bloqueados', evAd.every(e => e.bloqueado === true));
+ok('familia tambem bloqueada', evAd.filter(e=>e.categoria==='familiar').every(e=>e.bloqueado===true));
+const filaAd = agenda.montarFila('2026-03-10');
+ok('nenhum selecionado para disparo', filaAd.total_selecionados === 0, String(filaAd.total_selecionados));
+ok('motivo informado', /Adormecido/.test(filaAd.itens[0].motivo_bloqueio || ''));
+
+db.obreiros.salvar({ id:oAd.id, nome:'Irmão Adormecido', tratamento:'Ir.∴', grau:'Mestre', situacao:'Ativo',
+  dt_nascimento:'1970-03-10', dt_iniciacao:'2005-03-10' });
+const filaAtivo = agenda.montarFila('2026-03-10');
+ok('ao reativar volta a disparar', filaAtivo.total_selecionados >= 4, String(filaAtivo.total_selecionados));
+
+console.log('== Migracao de situacoes antigas ==');
+db.getConn().prepare("UPDATE obreiros SET situacao='Falecido' WHERE id=?").run(oAd.id);
+db.getConn().prepare("UPDATE obreiros SET situacao='Adormecido' WHERE situacao NOT IN ('Ativo','Adormecido')").run();
+ok('situacao legada vira Adormecido', db.obreiros.obter(oAd.id).situacao === 'Adormecido');
+
+console.log('== Migracao: novo tipo de evento entra na lista salva ==');
+db.config.salvar('eventos_habilitados', JSON.stringify(['aniversario_obreiro','maconica']));
+db.init(tmp);   // simula a abertura do app apos a atualizacao
+const habAgora = JSON.parse(db.config.obter('eventos_habilitados'));
+ok('sessao adicionada automaticamente', habAgora.includes('sessao'), habAgora.join(','));
+ok('nao apaga as escolhas do usuario', habAgora.includes('aniversario_obreiro') && !habAgora.includes('casamento'));
+db.config.salvar('eventos_habilitados', JSON.stringify(['aniversario_obreiro','aniversario_cunhada','aniversario_sobrinho','aniversario_sobrinha','iniciacao','elevacao','exaltacao','remissao','casamento','feriado_religioso','data_nacional','efemeride','maconica','sessao']));
+
+console.log('== Agenda da Loja (sessoes) ==');
+// julho/2026: segundas-feiras = 6, 13, 20, 27
+const pauta = agenda.sessoesDoMes(2026, 7);
+ok('so os dias de sessao', pauta.linhas.length === 4, String(pauta.linhas.length));
+ok('todas em segunda-feira', pauta.linhas.every(l => new Date(l.data+'T12:00:00').getDay() === 1));
+ok('datas corretas', pauta.linhas.map(l=>l.data).join(',') === '2026-07-06,2026-07-13,2026-07-20,2026-07-27',
+   pauta.linhas.map(l=>l.data).join(','));
+ok('nenhuma programada ainda', pauta.linhas.every(l => l.sessao === null));
+
+db.sessoes.salvar({ data:'2026-07-13', grau:'Companheiro', tipo:'Magna', hora:'20:00',
+  agenda_dia:'1. Abertura\n2. Elevacao do Ir. Fulano\n3. Encerramento' });
+const pauta2 = agenda.sessoesDoMes(2026, 7);
+ok('sessao aparece na pauta do mes', !!pauta2.linhas.find(l=>l.data==='2026-07-13').sessao);
+
+const evSes = agenda.eventosDoDia('2026-07-13');
+const ses = evSes.find(e=>e.tipo==='sessao');
+ok('sessao entra na agenda do dia', !!ses);
+ok('grau e tipo no evento', ses.grau==='Companheiro' && ses.tipo_sessao==='Magna');
+const filaSes = agenda.montarFila('2026-07-13');
+const itemSes = filaSes.itens.find(i=>i.tipo==='sessao');
+ok('mensagem da sessao montada', !!itemSes && !/\{\{/.test(itemSes.mensagem));
+ok('mensagem cita grau', /Grau de Companheiro/.test(itemSes.mensagem));
+ok('mensagem cita tipo', /SESSÃO MAGNA/i.test(itemSes.mensagem));
+ok('mensagem traz a pauta', /Elevacao do Ir\. Fulano/.test(itemSes.mensagem));
+ok('sessao selecionada para envio', itemSes.selecionado === true);
+console.log('\n--- mensagem da sessao ---\n'+itemSes.mensagem+'\n--------------------------');
+
+console.log('== Sessao sem pauta (convocacao padrao) ==');
+db.sessoes.salvar({ data:'2026-07-20', grau:'Aprendiz', tipo:'Economica' });
+const itemSemPauta = agenda.montarFila('2026-07-20').itens.find(i=>i.tipo==='sessao');
+ok('gera mensagem mesmo sem pauta', !!itemSemPauta && itemSemPauta.selecionado===true);
+ok('omite o bloco ORDEM DO DIA', !/ORDEM DO DIA/.test(itemSemPauta.mensagem));
+ok('mantem grau e horario', /Grau de Aprendiz/.test(itemSemPauta.mensagem) && /20:00/.test(itemSemPauta.mensagem));
+
+console.log('== Data adicional fora da segunda ==');
+db.sessoes.salvar({ data:'2026-07-25', grau:'Mestre', tipo:'Magna', especial:1, agenda_dia:'Sessão Magna de Aniversário' });
+const pauta3 = agenda.sessoesDoMes(2026, 7);
+ok('data adicional entra na pauta', pauta3.linhas.length === 5, String(pauta3.linhas.length));
+const extra = pauta3.linhas.find(l=>l.data==='2026-07-25');
+ok('marcada como nao regular', extra && extra.regular === false);
+ok('ordem cronologica mantida', pauta3.linhas.map(l=>l.data).join(',') ===
+   '2026-07-06,2026-07-13,2026-07-20,2026-07-25,2026-07-27');
+ok('sabado tambem gera evento', agenda.eventosDoDia('2026-07-25').some(e=>e.tipo==='sessao'));
+
+console.log('== Sessao marcada como nao enviar ==');
+db.sessoes.salvar({ data:'2026-07-06', grau:'Mestre', tipo:'Economica', enviar:0 });
+const bloq = agenda.montarFila('2026-07-06').itens.find(i=>i.tipo==='sessao');
+ok('respeita o nao enviar', bloq && bloq.selecionado===false && /não enviar/.test(bloq.motivo_bloqueio||''));
+
+console.log('== Backup inclui sessoes ==');
+const arq2 = path.join(tmp,'bkp2.ctrloja');
+const exp2 = backup.exportar(arq2);
+ok('sessoes exportadas', exp2.resumo.sessoes === 4, String(exp2.resumo.sessoes));
+db.sessoes.excluirPorData('2026-07-13');
+ok('sessao removida', !db.sessoes.obterPorData('2026-07-13'));
+backup.importar(arq2,'substituir');
+ok('sessao restaurada pelo backup', !!db.sessoes.obterPorData('2026-07-13'));
 
 console.log('\n'+(falhas?('FALHAS: '+falhas):'TODOS OS TESTES DE INTEGRACAO PASSARAM'));
 process.exit(falhas?1:0);

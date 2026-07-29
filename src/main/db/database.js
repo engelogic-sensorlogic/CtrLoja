@@ -35,7 +35,7 @@ const CONFIG_PADRAO = {
   eventos_habilitados: JSON.stringify([
     'aniversario_obreiro', 'aniversario_cunhada', 'aniversario_sobrinho', 'aniversario_sobrinha',
     'iniciacao', 'elevacao', 'exaltacao', 'remissao', 'casamento',
-    'feriado_religioso', 'data_nacional', 'efemeride', 'maconica'
+    'feriado_religioso', 'data_nacional', 'efemeride', 'maconica', 'sessao'
   ])
 };
 
@@ -55,11 +55,42 @@ function init(userDataPath) {
   const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   conn.exec(schema);
 
+  migrar();
   semearConfig();
   semearTemplates();
   semearDatas();
 
   return conn;
+}
+
+/** Ajustes de esquema/dados entre versoes do CtrLoja. */
+function migrar() {
+  // Situacao do Obreiro passou a ter apenas Ativo e Adormecido
+  try {
+    conn.prepare("UPDATE obreiros SET situacao = 'Adormecido' WHERE situacao IS NOT NULL AND situacao <> 'Ativo' AND situacao <> 'Adormecido'").run();
+    conn.prepare("UPDATE obreiros SET situacao = 'Ativo' WHERE situacao IS NULL OR situacao = ''").run();
+  } catch (err) {
+    console.warn('[db] migração de situação:', err.message);
+  }
+
+  // Tipos de evento criados depois da instalacao precisam entrar na lista
+  // ja gravada do usuario - o seed usa INSERT OR IGNORE e nao a atualizaria.
+  try {
+    const linha = conn.prepare("SELECT valor FROM config WHERE chave = 'eventos_habilitados'").get();
+    if (linha && linha.valor) {
+      const atuais = JSON.parse(linha.valor);
+      if (Array.isArray(atuais)) {
+        const novos = ['sessao'].filter((t) => !atuais.includes(t));
+        if (novos.length) {
+          conn.prepare("UPDATE config SET valor = ? WHERE chave = 'eventos_habilitados'")
+            .run(JSON.stringify([...atuais, ...novos]));
+          console.log(`[db] tipos de evento adicionados às configurações: ${novos.join(', ')}`);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[db] migração de eventos habilitados:', err.message);
+  }
 }
 
 function getConn() {
@@ -366,6 +397,69 @@ const templates = {
 };
 
 /* ------------------------------------------------------------------ */
+/* Sessoes da Loja (Agenda da Loja)                                    */
+/* ------------------------------------------------------------------ */
+
+const GRAUS_SESSAO = ['Aprendiz', 'Companheiro', 'Mestre'];
+const TIPOS_SESSAO = ['Economica', 'Magna'];
+
+const sessoes = {
+  listar(filtro = {}) {
+    let sql = 'SELECT * FROM sessoes WHERE 1 = 1';
+    const p = [];
+    if (filtro.de) { sql += ' AND data >= ?'; p.push(filtro.de); }
+    if (filtro.ate) { sql += ' AND data <= ?'; p.push(filtro.ate); }
+    if (filtro.somenteAtivas) sql += ' AND ativo = 1';
+    sql += ' ORDER BY data';
+    return getConn().prepare(sql).all(...p);
+  },
+
+  ativas() {
+    return getConn().prepare('SELECT * FROM sessoes WHERE ativo = 1').all();
+  },
+
+  obterPorData(data) {
+    return getConn().prepare('SELECT * FROM sessoes WHERE data = ?').get(data);
+  },
+
+  salvar(reg) {
+    if (!reg.data) throw new Error('A data da sessão é obrigatória.');
+    const dados = {
+      data: reg.data,
+      grau: GRAUS_SESSAO.includes(reg.grau) ? reg.grau : 'Aprendiz',
+      tipo: TIPOS_SESSAO.includes(reg.tipo) ? reg.tipo : 'Economica',
+      agenda_dia: reg.agenda_dia || null,
+      hora: reg.hora || null,
+      local: reg.local || null,
+      especial: reg.especial ? 1 : 0,
+      observacoes: reg.observacoes || null,
+      enviar: reg.enviar === undefined ? 1 : (reg.enviar ? 1 : 0),
+      ativo: reg.ativo === undefined ? 1 : (reg.ativo ? 1 : 0)
+    };
+    getConn().prepare(`
+      INSERT INTO sessoes (data, grau, tipo, agenda_dia, hora, local, especial, observacoes, enviar, ativo)
+      VALUES (@data, @grau, @tipo, @agenda_dia, @hora, @local, @especial, @observacoes, @enviar, @ativo)
+      ON CONFLICT(data) DO UPDATE SET
+        grau = excluded.grau, tipo = excluded.tipo, agenda_dia = excluded.agenda_dia,
+        hora = excluded.hora, local = excluded.local, especial = excluded.especial,
+        observacoes = excluded.observacoes, enviar = excluded.enviar, ativo = excluded.ativo,
+        atualizado_em = datetime('now','localtime')
+    `).run(dados);
+    return sessoes.obterPorData(dados.data);
+  },
+
+  excluir(id) {
+    getConn().prepare('DELETE FROM sessoes WHERE id = ?').run(id);
+    return true;
+  },
+
+  excluirPorData(data) {
+    getConn().prepare('DELETE FROM sessoes WHERE data = ?').run(data);
+    return true;
+  }
+};
+
+/* ------------------------------------------------------------------ */
 /* Grupos do WhatsApp                                                  */
 /* ------------------------------------------------------------------ */
 
@@ -447,6 +541,6 @@ const envios = {
 
 module.exports = {
   init, getConn, getPath,
-  config, obreiros, familiares, datas, templates, grupos, envios,
-  CONFIG_PADRAO
+  config, obreiros, familiares, datas, templates, sessoes, grupos, envios,
+  CONFIG_PADRAO, GRAUS_SESSAO, TIPOS_SESSAO
 };

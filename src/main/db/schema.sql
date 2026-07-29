@@ -105,6 +105,24 @@ CREATE TABLE IF NOT EXISTS envios_log (
 );
 CREATE INDEX IF NOT EXISTS idx_envios_data ON envios_log(data_ref);
 
+-- Agenda da Loja: sessoes -------------------------------------------
+CREATE TABLE IF NOT EXISTS sessoes (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  data            TEXT    NOT NULL UNIQUE,     -- YYYY-MM-DD
+  grau            TEXT    DEFAULT 'Aprendiz',  -- Aprendiz | Companheiro | Mestre
+  tipo            TEXT    DEFAULT 'Economica', -- Economica | Magna
+  agenda_dia      TEXT,                        -- ordem do dia / pauta
+  hora            TEXT,                        -- vazio = usa o horario padrao da Loja
+  local           TEXT,                        -- vazio = usa o Templo padrao
+  especial        INTEGER DEFAULT 0,           -- 1 = data adicional fora do dia de sessao
+  observacoes     TEXT,
+  enviar          INTEGER DEFAULT 1,
+  ativo           INTEGER DEFAULT 1,
+  criado_em       TEXT    DEFAULT (datetime('now','localtime')),
+  atualizado_em   TEXT    DEFAULT (datetime('now','localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_sessoes_data ON sessoes(data);
+
 -- Controle para evitar disparo duplicado no mesmo dia ------------------
 CREATE TABLE IF NOT EXISTS controle_disparo (
   data_ref        TEXT PRIMARY KEY,

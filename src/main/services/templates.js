@@ -108,7 +108,13 @@ function montarContexto(evento) {
     evento: evento.evento || evento.descricao_curta || '',
     descricao: evento.descricao || '',
     ano_origem: evento.ano_origem || '',
-    categoria: evento.categoria || ''
+    categoria: evento.categoria || '',
+    // Sessoes da Loja
+    grau: evento.grau || '',
+    tipo_sessao: evento.tipo_sessao || '',
+    agenda_dia: evento.agenda_dia || '',
+    hora_sessao: evento.hora_sessao || '',
+    local_sessao: evento.local_sessao || ''
   };
 }
 
@@ -150,6 +156,11 @@ function variaveisDisponiveis() {
     { v: '{{obreiro_titulo}}', d: 'Título do Obreiro vinculado (para familiares)' },
     { v: '{{obreiro_nome}}', d: 'Nome do Obreiro vinculado (para familiares)' },
     { v: '{{conjuge}}', d: 'Nome da Cunhada (aniversário de casamento)' },
+    { v: '{{grau}}', d: 'Grau da sessão: Aprendiz, Companheiro ou Mestre' },
+    { v: '{{tipo_sessao}}', d: 'Tipo da sessão: Econômica ou Magna' },
+    { v: '{{agenda_dia}}', d: 'Agenda do Dia (ordem do dia) da sessão' },
+    { v: '{{hora_sessao}}', d: 'Horário da sessão' },
+    { v: '{{local_sessao}}', d: 'Local da sessão' },
     { v: '{{evento}}', d: 'Título da data comemorativa / efeméride' },
     { v: '{{descricao}}', d: 'Descrição da data comemorativa / efeméride' },
     { v: '{{ano_origem}}', d: 'Ano do fato histórico' },
@@ -172,6 +183,11 @@ const EXEMPLOS = {
   data_nacional: { evento: 'Independência do Brasil', descricao: 'Proclamada por D. Pedro I às margens do Ipiranga.', ano_origem: 1822 },
   efemeride: { evento: 'Revolução Francesa - Queda da Bastilha', descricao: 'Marco dos ideais de Liberdade, Igualdade e Fraternidade.', ano_origem: 1789 },
   maconica: { evento: 'Dia do Maçom', descricao: 'Em memória da sessão histórica de 20 de agosto de 1822.', ano_origem: 1822 },
+  sessao: {
+    grau: 'Aprendiz', tipo_sessao: 'Econômica', hora_sessao: '20:00',
+    local_sessao: 'Templo na Chácara Água Limpa — Estrada Rolândia / Caramuru',
+    agenda_dia: '1. Abertura dos Trabalhos\n2. Leitura e aprovação do Balaústre\n3. Expediente\n4. Instrução do Grau\n5. Palavra a bem da Ordem\n6. Encerramento'
+  },
   cabecalho_diario: {}
 };
 
