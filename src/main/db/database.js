@@ -26,6 +26,7 @@ const CONFIG_PADRAO = {
   titulo_cunhada: 'Cunhada',
   titulo_sobrinho: 'Sobrinho',
   titulo_sobrinha: 'Sobrinha',
+  wa_autoconectar: '1',               // reconecta o WhatsApp ao abrir o app
   disparo_modo: 'revisao',            // revisao | automatico | manual
   disparo_hora: '07:30',
   disparo_dias: '1,2,3,4,5,6,0',      // dias da semana habilitados

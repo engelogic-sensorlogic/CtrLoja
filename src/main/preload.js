@@ -61,6 +61,12 @@ contextBridge.exposeInMainWorld('api', {
     salvar: (mapa) => call('config:salvar', mapa)
   },
 
+  rotina: {
+    estado: () => call('rotina:estado'),
+    executar: (forcar) => call('rotina:executar', forcar),
+    verificar: () => call('rotina:verificar')
+  },
+
   whatsapp: {
     status: () => call('whatsapp:status'),
     conectar: (opts) => call('whatsapp:conectar', opts),

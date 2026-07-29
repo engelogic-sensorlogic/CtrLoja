@@ -83,6 +83,7 @@ App.views.config = {
     }
 
     const chkAgrupar = el('input', { type: 'checkbox', style: 'width:auto', checked: cfg.agrupar_mensagens === '1' });
+    const chkAutoConectar = el('input', { type: 'checkbox', style: 'width:auto', checked: (cfg.wa_autoconectar || '1') === '1' });
 
     const habilitados = (() => { try { return JSON.parse(cfg.eventos_habilitados || '[]'); } catch { return []; } })();
     const boxEventos = el('div', { class: 'lista-check', style: 'max-height:230px' });
@@ -104,8 +105,75 @@ App.views.config = {
       el('label', { class: 'campo' }, [el('span', { text: 'Dias da semana em que a rotina roda' }), boxDias]),
       el('label', { style: 'display:flex;align-items:center;gap:8px;margin:10px 0' }, [
         chkAgrupar, el('span', { text: 'Agrupar todos os eventos do dia em uma única mensagem' })
+      ]),
+      el('label', { style: 'display:flex;align-items:center;gap:8px;margin:10px 0' }, [
+        chkAutoConectar, el('span', { text: 'Conectar o WhatsApp automaticamente ao abrir o aplicativo (necessário para o disparo 100% automático)' })
       ])
     ]);
+
+    /* --------- Situação da rotina --------- */
+    const boxRotina = el('div');
+    const cardRotina = el('div', { class: 'cartao' }, [
+      el('h3', { text: 'Situação da rotina de disparo' }),
+      boxRotina,
+      el('div', { class: 'linha compacta', style: 'margin-top:12px' }, [
+        el('button', { class: 'btn secundario', text: '🔄 Atualizar', onclick: () => pintarRotina() }),
+        el('button', {
+          class: 'btn', text: '▶ Executar rotina agora',
+          onclick: async () => {
+            const r = await tentar(window.api.rotina.executar(false), 'Falha ao executar a rotina');
+            if (r) toast('Rotina executada. Veja o resultado abaixo.', 'ok');
+            pintarRotina();
+          }
+        }),
+        el('button', {
+          class: 'btn perigo', text: '⚠ Forçar disparo (mesmo já enviado)',
+          onclick: async () => {
+            if (!await confirmar('Isto envia as mensagens de hoje AGORA, ignorando o registro de disparo. Pode duplicar mensagens no grupo. Confirma?')) return;
+            const r = await tentar(window.api.rotina.executar(true), 'Falha ao forçar o disparo');
+            if (r) toast('Disparo forçado executado.', 'ok');
+            pintarRotina();
+          }
+        })
+      ])
+    ]);
+
+    async function pintarRotina() {
+      const e = await tentar(window.api.rotina.estado()) || {};
+      const sim = (v) => (v ? 'sim' : 'não');
+      const rotuloModo = { revisao: 'Automático com revisão prévia', automatico: '100% automático', manual: 'Somente manual' }[e.modo] || e.modo;
+
+      const linhas = [
+        ['Modo atual', rotuloModo],
+        ['Próxima execução', e.proxima_descricao || '—'],
+        ['Expressão do agendador', e.expressao || '—'],
+        ['Hoje é dia habilitado', sim(e.hoje_habilitado)],
+        ['Horário de hoje já passou', sim(e.horario_ja_passou)],
+        ['Já disparado hoje', sim(e.ja_disparado_hoje)],
+        ['Aguardando conexão do WhatsApp', sim(e.adiado_por_whatsapp)],
+        ['Última execução', e.ultima_execucao || '—'],
+        ['Último resultado', e.ultimo_resultado || '—']
+      ];
+
+      const tbody = el('tbody');
+      for (const [k, v] of linhas) {
+        tbody.appendChild(el('tr', {}, [
+          el('td', { style: 'font-weight:600;width:250px', text: k }),
+          el('td', { text: v })
+        ]));
+      }
+
+      boxRotina.innerHTML = '';
+      boxRotina.appendChild(el('table', {}, [tbody]));
+
+      if (e.modo === 'automatico' && App.waStatus.estado !== 'pronto') {
+        boxRotina.appendChild(el('div', {
+          class: 'aviso', style: 'margin-top:10px',
+          html: 'O modo <strong>100% automático</strong> exige o WhatsApp conectado. '
+            + 'O aplicativo precisa ficar aberto no horário do disparo.'
+        }));
+      }
+    }
 
     const cardEventos = el('div', { class: 'cartao' }, [
       el('h3', { text: 'Tipos de evento habilitados para envio' }),
@@ -148,7 +216,9 @@ App.views.config = {
 
     alvo.innerHTML = '';
     alvo.appendChild(form);
+    alvo.appendChild(cardRotina);
     alvo.appendChild(cardBanco);
+    await pintarRotina();
 
     acaoTopo('Salvar configurações', async () => {
       const fd = new FormData(form);
@@ -156,10 +226,11 @@ App.views.config = {
       for (const [k, v] of fd.entries()) mapa[k] = v;
       mapa.disparo_dias = checksDias.filter((c) => c.checked).map((c) => c.value).join(',') || '0,1,2,3,4,5,6';
       mapa.agrupar_mensagens = chkAgrupar.checked ? '1' : '0';
+      mapa.wa_autoconectar = chkAutoConectar.checked ? '1' : '0';
       mapa.eventos_habilitados = JSON.stringify(checksEventos.filter((c) => c.checked).map((c) => c.value));
 
       const novo = await tentar(window.api.config.salvar(mapa), 'Falha ao salvar configurações');
-      if (novo) { App.config = novo; toast('Configurações salvas.', 'ok'); }
+      if (novo) { App.config = novo; toast('Configurações salvas.', 'ok'); pintarRotina(); }
     }, '');
   }
 };

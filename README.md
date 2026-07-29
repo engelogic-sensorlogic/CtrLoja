@@ -88,6 +88,50 @@ Saídas:
 
 ---
 
+## Modelos de mensagem: do aplicativo para o código-fonte
+
+Os textos são editados na tela **Modelos**, dentro do aplicativo, e ficam gravados no banco
+local. Para que o **instalador** já nasça com os textos definitivos da Loja, execute:
+
+```bat
+sincronizar-modelos.bat
+```
+
+Ele lê os modelos do banco em uso e regrava `src/main/db/templates-padrao.js`, mostrando o que
+mudou e guardando uma cópia de segurança do arquivo anterior. Depois é só `git commit` e `build.bat`.
+
+Também aceita um backup como origem:
+
+```bat
+sincronizar-modelos.bat "C:\caminho\CtrLoja-backup.ctrloja"
+```
+
+> Instalações existentes **não** têm seus textos sobrescritos — o seed só preenche modelos que
+> ainda não existem. Para voltar aos textos de fábrica, use *Restaurar textos de fábrica* na tela Modelos.
+
+---
+
+## Rotina de disparo
+
+| Modo | Comportamento |
+|------|---------------|
+| Automático com revisão prévia | No horário, monta a fila e abre a Agenda para você conferir e enviar |
+| 100% automático | Envia sozinho, sem intervenção |
+| Somente manual | Só dispara quando você clicar |
+
+O modo 100% automático exige o aplicativo **aberto** e o WhatsApp **conectado**. Para isso:
+
+- a opção *Conectar o WhatsApp automaticamente ao abrir* vem ligada;
+- se o aplicativo abrir depois do horário, a rotina **recupera** o disparo do dia;
+- se o WhatsApp ainda não estiver pronto, o envio fica pendente e é **refeito assim que conectar**;
+- uma verificação a cada 5 minutos cobre o caso de o computador ter ficado suspenso;
+- o registro de disparo do dia impede envio duplicado.
+
+Em *Configurações → Situação da rotina de disparo* você acompanha o estado e pode usar
+**Executar rotina agora** para testar sem esperar o horário.
+
+---
+
 ## Logotipos
 
 Coloque na **pasta raiz do aplicativo** (a mesma do `CtrLoja.exe`, ou a raiz do projeto em modo

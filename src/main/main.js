@@ -84,20 +84,56 @@ function send(channel, payload) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Conexao automatica do WhatsApp no arranque                          */
+/*                                                                     */
+/* Sem isto, o disparo 100% automatico nunca acontece depois de fechar  */
+/* e reabrir o aplicativo: a rotina roda, encontra o WhatsApp           */
+/* desconectado e adia o envio indefinidamente.                        */
+/* ------------------------------------------------------------------ */
+
+function autoConectarWhatsApp(sessionPath) {
+  if (db.config.obter('wa_autoconectar', '1') !== '1') return;
+
+  const temSessao = fs.existsSync(path.join(sessionPath, 'credenciais', 'creds.json'));
+  if (!temSessao) {
+    console.log('[ctrloja] Sem sessão gravada: aguardando leitura do QR Code.');
+    return;
+  }
+
+  // Pequena folga para a janela terminar de abrir
+  setTimeout(() => {
+    console.log('[ctrloja] Reconectando o WhatsApp automaticamente…');
+    whatsapp.conectar().catch((err) => console.error('[ctrloja] Falha na conexão automática:', err.message));
+  }, 3000);
+}
+
+/* ------------------------------------------------------------------ */
 /* Ciclo de vida                                                       */
 /* ------------------------------------------------------------------ */
 
 app.whenReady().then(() => {
   db.init(app.getPath('userData'));
+
+  const sessionPath = path.join(app.getPath('userData'), 'wa-session');
+
   whatsapp.configure({
-    sessionPath: path.join(app.getPath('userData'), 'wa-session'),
-    onEvent: (evt) => send('whatsapp:event', evt)
+    sessionPath,
+    onEvent: (evt) => {
+      send('whatsapp:event', evt);
+      // Retoma o disparo automatico que ficou adiado por falta de conexao
+      if (evt.tipo === 'estado' && evt.estado === 'pronto') {
+        scheduler.aoWhatsappPronto().catch(() => {});
+      }
+    }
   });
+
   scheduler.start({
     onFila: (fila) => send('agenda:fila-do-dia', fila),
     onLog: (msg) => send('app:log', msg)
   });
+
   createWindow();
+  autoConectarWhatsApp(sessionPath);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -216,6 +252,14 @@ handle('config:salvar', (mapa) => {
   scheduler.reagendar();
   return db.config.obterTodas();
 });
+
+/* ------------------------------------------------------------------ */
+/* IPC - Rotina de disparo                                             */
+/* ------------------------------------------------------------------ */
+
+handle('rotina:estado', () => scheduler.estadoRotina());
+handle('rotina:executar', (forcar) => scheduler.executar({ origem: 'execução manual', forcar: !!forcar }));
+handle('rotina:verificar', () => scheduler.verificarPendencia('verificação manual'));
 
 /* ------------------------------------------------------------------ */
 /* IPC - WhatsApp                                                      */
