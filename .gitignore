@@ -14,6 +14,9 @@ Thumbs.db
 .wwebjs_cache/
 wa-session/
 
+# Copias de seguranca geradas pelo sincronizar-modelos
+*.anterior.js
+
 # Banco de dados local e backups
 *.db
 *.db-journal
