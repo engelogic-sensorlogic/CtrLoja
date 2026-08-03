@@ -172,18 +172,16 @@ dois caminhos byte a byte.
 O app precisa ser servido por HTTP (não abre por `file://`), **a partir da raiz do projeto**,
 porque busca os módulos em `../src/main/services/`.
 
-| Forma | Comando / endereço | Observação |
-|-------|--------------------|------------|
-| Teste na rede local | `python -m http.server 8080` na raiz, depois `http://<ip-do-pc>:8080/mobile/` | Sem HTTPS: não instala como app nem abre a folha de compartilhamento; o botão Enviar cai no `wa.me` |
-| GitHub Pages | Publicar o repositório; acessar `/CtrLoja/mobile/` | HTTPS grátis, instala na tela inicial. **Só o código é publicado — os dados nunca** |
-| Synology Web Station | Pasta do projeto + HTTPS do DSM | Fica tudo na sua rede |
+| Forma | Endereço | Observação |
+|-------|----------|------------|
+| **GitHub Pages** (recomendado) | `https://engelogic-sensorlogic.github.io/CtrLoja/mobile/` | HTTPS grátis, instala na tela inicial, funciona **em qualquer lugar** sem VPN e sem o PC ligado |
+| Teste na rede local | `python -m http.server 8080` na raiz → `http://<ip-do-pc>:8080/mobile/` | Sem HTTPS: não instala como app; o botão Enviar cai no `wa.me` |
+| Synology Web Station | pasta do projeto + HTTPS do DSM | Nada público, mas exige a VPN quando estiver fora |
 
-### Uso no celular
+Para o GitHub Pages: *Settings → Pages → Deploy from a branch → main → / (root)*.
+O arquivo `.nojekyll` na raiz é obrigatório — sem ele o GitHub reescreve o conteúdo.
 
-1. Abrir o endereço e, no menu do navegador, **Instalar aplicativo** / *Adicionar à tela inicial*
-2. **Carregar o arquivo `.ctrloja`** exportado do computador
-3. Aba **Hoje**: mensagens prontas, botão **Enviar** abre o WhatsApp com o texto
-4. Ao alterar o cadastro no computador, exportar de novo e recarregar em **Dados**
+Passo a passo completo em **[docs/APP-CELULAR.md](docs/APP-CELULAR.md)**.
 
 ---
 

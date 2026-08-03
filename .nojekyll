@@ -1,0 +1,7 @@
+Este arquivo desliga o processamento Jekyll do GitHub Pages.
+
+Sem ele, o GitHub tenta interpretar o repositorio como um site Jekyll e
+ignora pastas e arquivos que comecam com underline, alem de reescrever
+conteudo. O CtrLoja Mobile precisa que os arquivos sejam servidos
+exatamente como estao - inclusive os modulos em src/main/services/, que
+o aplicativo do celular carrega diretamente.

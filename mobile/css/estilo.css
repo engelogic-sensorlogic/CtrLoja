@@ -22,9 +22,18 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
+/* --------------------------------------------------------------
+   As fontes de emoji entram explicitamente na lista. Sem elas, em
+   alguns Androids o navegador nao busca a fonte do sistema e mostra
+   um losango com "?" no lugar de 🏛️, 📅, 📜 e ⚜️.
+   Isso e so exibicao: o caractere enviado ao WhatsApp e sempre o
+   correto, e cada aparelho o desenha com a fonte que tiver.
+   -------------------------------------------------------------- */
 html, body {
   margin: 0;
-  font-family: "Segoe UI", Roboto, system-ui, sans-serif;
+  font-family: "Segoe UI", Roboto, system-ui, sans-serif,
+               "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji",
+               "Noto Emoji", "Android Emoji", "EmojiOne Color";
   font-size: 16px;
   color: var(--c-texto);
   background: var(--c-fundo);
@@ -93,7 +102,10 @@ main { padding: 12px 12px calc(env(safe-area-inset-bottom, 0px) + 24px); }
 .evento-info small { color: var(--c-texto-suave); font-size: 12px; }
 
 .mensagem {
-  margin: 0; padding: 12px; font-family: inherit; font-size: 13.5px;
+  margin: 0; padding: 12px; font-size: 13.5px;
+  font-family: "Segoe UI", Roboto, system-ui, sans-serif,
+               "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji",
+               "Noto Emoji", "Android Emoji";
   line-height: 1.55; white-space: pre-wrap; word-wrap: break-word;
   background: #F7FCFC; max-height: 230px; overflow-y: auto;
 }
