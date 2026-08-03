@@ -1,0 +1,32 @@
+{
+  "name": "CtrLoja — Agenda da Loja",
+  "short_name": "CtrLoja",
+  "description": "Agenda e mensagens da A∴R∴L∴S∴ União Fraternal Rolandense nº 141, com envio manual pelo WhatsApp.",
+  "lang": "pt-BR",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#C7E6E3",
+  "theme_color": "#008CCC",
+  "icons": [
+    {
+      "src": "icons/icone-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icone-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icone-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

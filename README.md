@@ -153,6 +153,40 @@ Em *Configurações → Situação da rotina de disparo* você acompanha o estad
 
 ---
 
+## Aplicativo do celular (PWA)
+
+Em `mobile/` há uma versão para celular, **somente consulta e disparo manual**. Ela monta a
+mensagem e entrega o texto pronto ao WhatsApp do próprio aparelho — quem envia é o WhatsApp,
+pelo caminho oficial. Sem automação, sem servidor, sem VPN.
+
+**Os dados vêm do arquivo `.ctrloja`** exportado pelo desktop (Configurações → Exportar banco de
+dados) e ficam guardados **apenas no celular**. Nada é publicado.
+
+O detalhe que sustenta tudo: o app do celular **não tem cópia da lógica**. Ele carrega
+`calendario.js`, `templates.js` e `agenda.js` do próprio `src/` do desktop e os executa no
+navegador. A mensagem nasce do mesmo código nos dois lados, e `test/teste-mobile.js` compara os
+dois caminhos byte a byte.
+
+### Como servir
+
+O app precisa ser servido por HTTP (não abre por `file://`), **a partir da raiz do projeto**,
+porque busca os módulos em `../src/main/services/`.
+
+| Forma | Comando / endereço | Observação |
+|-------|--------------------|------------|
+| Teste na rede local | `python -m http.server 8080` na raiz, depois `http://<ip-do-pc>:8080/mobile/` | Sem HTTPS: não instala como app nem abre a folha de compartilhamento; o botão Enviar cai no `wa.me` |
+| GitHub Pages | Publicar o repositório; acessar `/CtrLoja/mobile/` | HTTPS grátis, instala na tela inicial. **Só o código é publicado — os dados nunca** |
+| Synology Web Station | Pasta do projeto + HTTPS do DSM | Fica tudo na sua rede |
+
+### Uso no celular
+
+1. Abrir o endereço e, no menu do navegador, **Instalar aplicativo** / *Adicionar à tela inicial*
+2. **Carregar o arquivo `.ctrloja`** exportado do computador
+3. Aba **Hoje**: mensagens prontas, botão **Enviar** abre o WhatsApp com o texto
+4. Ao alterar o cadastro no computador, exportar de novo e recarregar em **Dados**
+
+---
+
 ## Logotipos
 
 Coloque na **pasta raiz do aplicativo** (a mesma do `CtrLoja.exe`, ou a raiz do projeto em modo
