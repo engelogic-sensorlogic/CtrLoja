@@ -1,15 +1,27 @@
 /* ==================================================================
    CtrLoja Mobile — service worker
+   ==================================================================
+
    Guarda o aplicativo no aparelho para funcionar sem internet.
    Os dados da Loja não passam por aqui: ficam no armazenamento local.
+
+   ESTRATÉGIA: rede primeiro, cache como reserva.
+
+   A versão anterior fazia o contrário — cache primeiro — e o resultado
+   foi o aplicativo nunca se atualizar: o celular continuava servindo o
+   index.html antigo, que nem sequer carregava os arquivos novos.
+   Com rede primeiro, havendo internet o aparelho sempre pega a versão
+   publicada; sem internet, usa a última que guardou.
    ================================================================== */
 
-const VERSAO = 'ctrloja-mobile-v1';
+const VERSAO = 'ctrloja-mobile-v2';
 
 const ARQUIVOS = [
   './',
   './index.html',
   './css/estilo.css',
+  './js/cargos.js',
+  './js/cripto.js',
   './js/dados.js',
   './js/nucleo.js',
   './js/app.js',
@@ -26,8 +38,8 @@ self.addEventListener('install', (evento) => {
   evento.waitUntil(
     caches.open(VERSAO)
       .then((cache) => cache.addAll(ARQUIVOS))
+      .catch(() => { /* sem rede na instalação: segue assim mesmo */ })
       .then(() => self.skipWaiting())
-      .catch(() => self.skipWaiting())
   );
 });
 
@@ -42,26 +54,35 @@ self.addEventListener('activate', (evento) => {
 });
 
 self.addEventListener('fetch', (evento) => {
-  if (evento.request.method !== 'GET') return;
+  const req = evento.request;
+  if (req.method !== 'GET') return;
 
-  // Rede primeiro para os módulos do desktop: assim uma correção feita
-  // no computador chega ao celular na próxima vez que houver internet.
-  const ehModulo = evento.request.url.indexOf('/src/main/services/') >= 0;
-
-  if (ehModulo) {
-    evento.respondWith(
-      fetch(evento.request)
-        .then((resp) => {
-          const copia = resp.clone();
-          caches.open(VERSAO).then((c) => c.put(evento.request, copia));
-          return resp;
-        })
-        .catch(() => caches.match(evento.request))
-    );
-    return;
-  }
+  // O pacote de dados é sempre buscado direto pelo aplicativo, com
+  // controle próprio de versão. O service worker não se mete.
+  if (req.url.indexOf('/dados/') >= 0) return;
 
   evento.respondWith(
-    caches.match(evento.request).then((cacheado) => cacheado || fetch(evento.request))
+    fetch(req)
+      .then((resp) => {
+        // Guarda a cópia mais recente para quando faltar internet
+        if (resp && resp.status === 200 && resp.type === 'basic') {
+          const copia = resp.clone();
+          caches.open(VERSAO).then((c) => c.put(req, copia)).catch(() => {});
+        }
+        return resp;
+      })
+      .catch(() => caches.match(req).then((guardado) => {
+        if (guardado) return guardado;
+        // Navegação sem rede e sem cópia: entrega a página inicial
+        if (req.mode === 'navigate') return caches.match('./index.html');
+        return new Response('Sem conexão e sem cópia local.', {
+          status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+        });
+      }))
   );
+});
+
+/* Permite ao aplicativo forçar a troca de versão sem fechar o app. */
+self.addEventListener('message', (evento) => {
+  if (evento.data === 'atualizar-agora') self.skipWaiting();
 });

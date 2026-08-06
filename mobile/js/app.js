@@ -14,6 +14,10 @@
 (function () {
   'use strict';
 
+  // Aparece na aba Dados. Serve para conferir, de olho, se o aparelho
+  // esta mesmo com a ultima versao publicada do aplicativo.
+  const VERSAO_APP = '2026.08.06-2';
+
   const CHAVE = 'ctrloja.pacote';
   const CHAVE_VERSAO = 'ctrloja.versao';
   const CHAVE_SENHA = 'ctrloja.senha';
@@ -471,6 +475,39 @@
       el('button', {
         class: 'btn secundario largo', text: '📂 Carregar arquivo .ctrloja',
         onclick: () => $('#arquivo').click()
+      })
+    ]));
+
+    caixa.appendChild(el('div', { class: 'cartao' }, [
+      el('h2', { text: 'Versão do aplicativo' }),
+      el('div', { class: 'item-lista' }, [
+        el('strong', { text: VERSAO_APP }),
+        el('small', { text: 'Se o computador publicou uma versão mais nova e esta não mudou, use o botão abaixo.' })
+      ]),
+      el('button', {
+        class: 'btn secundario largo', style: 'margin-top:10px',
+        text: '♻ Forçar atualização do aplicativo',
+        onclick: async () => {
+          try {
+            if ('serviceWorker' in navigator) {
+              const regs = await navigator.serviceWorker.getRegistrations();
+              for (const r of regs) await r.unregister();
+            }
+            if (window.caches) {
+              const chaves = await caches.keys();
+              for (const c of chaves) await caches.delete(c);
+            }
+            aviso('Cache limpo. Recarregando…', 'ok');
+            setTimeout(() => location.reload(true), 900);
+          } catch (err) {
+            aviso('Não foi possível limpar: ' + err.message, 'erro');
+          }
+        }
+      }),
+      el('p', {
+        style: 'font-size:12px;color:var(--c-texto-suave);margin:10px 0 0;line-height:1.5',
+        text: 'Isto apaga apenas os arquivos do aplicativo guardados no navegador. '
+          + 'A agenda sincronizada não é perdida.'
       })
     ]));
 
