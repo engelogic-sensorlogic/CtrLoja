@@ -1,0 +1,181 @@
+'use strict';
+
+/* ==================================================================
+   Criptografia: o desktop cifra, o navegador decifra
+
+   O teste exercita os DOIS lados de verdade:
+     - src/main/services/cripto.js  usa o crypto do Node
+     - mobile/js/cripto.js          usa a Web Crypto API
+
+   O Node 22 expõe a mesma Web Crypto do navegador em globalThis.crypto,
+   então o código do celular roda aqui sem adaptação.
+
+   Execute com:  node --no-warnings test/teste-cripto.js
+   ================================================================== */
+
+const path = require('path');
+const fs = require('fs');
+const os = require('os');
+const vm = require('vm');
+
+const RAIZ = path.join(__dirname, '..');
+const criptoDesktop = require(path.join(RAIZ, 'src', 'main', 'services', 'cripto.js'));
+
+let falhas = 0;
+const ok = (n, c, e = '') => {
+  console.log((c ? '  OK  ' : 'FALHA ') + n + (e ? ' -> ' + e : ''));
+  if (!c) falhas++;
+};
+
+/* Carrega o módulo do celular num contexto de "navegador" */
+const self = { crypto: globalThis.crypto, TextEncoder, TextDecoder, atob };
+vm.createContext(self);
+self.self = self;
+vm.runInContext(
+  fs.readFileSync(path.join(RAIZ, 'mobile', 'js', 'cripto.js'), 'utf8'),
+  self
+);
+const criptoMobile = self.CtrLojaCripto;
+
+(async () => {
+  console.log('== Módulos ==');
+  ok('desktop expõe cifrar/decifrar',
+    typeof criptoDesktop.cifrar === 'function' && typeof criptoDesktop.decifrar === 'function');
+  ok('celular expõe decifrar', typeof criptoMobile.decifrar === 'function');
+  ok('Web Crypto disponível no teste', criptoMobile.disponivel() === true);
+
+  const SENHA = 'UniaoFraternal141';
+
+  /* ---------------- ida e volta ---------------- */
+
+  console.log('\n== Desktop cifra → celular decifra ==');
+
+  const original = {
+    formato: 'ctrloja-backup',
+    gerado_em: new Date().toISOString(),
+    dados: {
+      obreiros: [
+        { id: 1, nome: 'João Carlos de Souza', tratamento: 'Ir.∴', dt_nascimento: '1974-09-04' },
+        { id: 2, nome: 'Álvaro de Andrade', tratamento: 'Ir.∴', dt_nascimento: '1990-03-21' }
+      ],
+      familiares: [{ id: 1, obreiro_id: 1, parentesco: 'cunhada', nome: 'Maria Helena' }],
+      config: [{ chave: 'loja_nome', valor: 'A∴R∴L∴S∴ União Fraternal Rolandense nº 141' }]
+    }
+  };
+
+  const envelope = criptoDesktop.cifrar(original, SENHA);
+
+  ok('envelope tem o formato esperado', envelope.formato === 'ctrloja-cifrado' && envelope.versao === 1);
+  ok('algoritmos declarados',
+    envelope.kdf.algoritmo === 'PBKDF2-SHA256' && envelope.cifra.algoritmo === 'AES-256-GCM');
+  ok('iterações conforme recomendação OWASP', envelope.kdf.iteracoes >= 310000, String(envelope.kdf.iteracoes));
+
+  const texto = JSON.stringify(envelope);
+  ok('nome do Irmão NÃO aparece em claro', texto.indexOf('João Carlos') === -1);
+  ok('nome da Loja NÃO aparece em claro', texto.indexOf('União Fraternal') === -1);
+  ok('nenhum dado legível no arquivo', !/Maria Helena|Álvaro|1974-09-04/.test(texto));
+
+  const aberto = await criptoMobile.decifrar(envelope, SENHA);
+  ok('celular recuperou o conteúdo íntegro', JSON.stringify(aberto) === JSON.stringify(original));
+  ok('acentos e sinais maçônicos preservados',
+    aberto.dados.config[0].valor === original.dados.config[0].valor,
+    aberto.dados.config[0].valor);
+
+  /* ---------------- volta pelo desktop ---------------- */
+
+  console.log('\n== Desktop também decifra o que cifrou ==');
+  const abertoDesktop = criptoDesktop.decifrar(envelope, SENHA);
+  ok('ida e volta no desktop', JSON.stringify(abertoDesktop) === JSON.stringify(original));
+
+  /* ---------------- senha errada ---------------- */
+
+  console.log('\n== Senha errada é recusada ==');
+  try {
+    await criptoMobile.decifrar(envelope, 'senhaErrada123');
+    ok('celular recusa senha errada', false);
+  } catch (e) {
+    ok('celular recusa senha errada', /Senha incorreta|corrompido/i.test(e.message), e.message);
+  }
+  try {
+    criptoDesktop.decifrar(envelope, 'senhaErrada123');
+    ok('desktop recusa senha errada', false);
+  } catch (e) {
+    ok('desktop recusa senha errada', /Senha incorreta|corrompido/i.test(e.message), e.message);
+  }
+
+  /* ---------------- adulteração ---------------- */
+
+  console.log('\n== Arquivo adulterado é detectado ==');
+  const adulterado = JSON.parse(JSON.stringify(envelope));
+  const bytes = Buffer.from(adulterado.dados, 'base64');
+  bytes[10] = bytes[10] ^ 0xFF;                      // vira um bit no meio do conteúdo
+  adulterado.dados = bytes.toString('base64');
+  try {
+    await criptoMobile.decifrar(adulterado, SENHA);
+    ok('celular detecta adulteração', false);
+  } catch (e) {
+    ok('celular detecta adulteração', /corrompido|incorreta/i.test(e.message));
+  }
+  try {
+    criptoDesktop.decifrar(adulterado, SENHA);
+    ok('desktop detecta adulteração', false);
+  } catch (e) {
+    ok('desktop detecta adulteração', /corrompido|incorreta/i.test(e.message));
+  }
+
+  /* ---------------- sal e IV nunca se repetem ---------------- */
+
+  console.log('\n== Cada publicação gera material novo ==');
+  const e1 = criptoDesktop.cifrar(original, SENHA);
+  const e2 = criptoDesktop.cifrar(original, SENHA);
+  ok('sal diferente a cada vez', e1.kdf.sal !== e2.kdf.sal);
+  ok('IV diferente a cada vez', e1.cifra.iv !== e2.cifra.iv);
+  ok('mesmo conteúdo gera cifras diferentes', e1.dados !== e2.dados);
+
+  /* ---------------- validações ---------------- */
+
+  console.log('\n== Validações ==');
+  try { criptoDesktop.cifrar(original, 'curta'); ok('exige senha de 8+ caracteres', false); }
+  catch (e) { ok('exige senha de 8+ caracteres', /8 caracteres/.test(e.message)); }
+
+  try { await criptoMobile.decifrar({ formato: 'outra-coisa' }, SENHA); ok('recusa arquivo estranho', false); }
+  catch (e) { ok('recusa arquivo estranho', /não é um pacote cifrado/i.test(e.message)); }
+
+  try { await criptoMobile.decifrar(envelope, ''); ok('exige a senha', false); }
+  catch (e) { ok('exige a senha', /Informe a senha/i.test(e.message)); }
+
+  /* ---------------- impressão digital ---------------- */
+
+  console.log('\n== Impressão digital (detecta novidade) ==');
+  const h1 = criptoDesktop.impressao(JSON.stringify(original));
+  const h2 = await criptoMobile.impressao(JSON.stringify(original));
+  ok('desktop e celular calculam a mesma impressão', h1 === h2, h1.slice(0, 16) + '…');
+  const h3 = criptoDesktop.impressao(JSON.stringify({ ...original, extra: 1 }));
+  ok('conteúdo diferente muda a impressão', h1 !== h3);
+
+  /* ---------------- volume real ---------------- */
+
+  console.log('\n== Desempenho com uma Loja inteira ==');
+  const grande = { formato: 'ctrloja-backup', dados: { obreiros: [], familiares: [] } };
+  for (let i = 0; i < 80; i++) {
+    grande.dados.obreiros.push({
+      id: i, nome: `Irmão de Teste Número ${i}`, tratamento: 'Ir.∴',
+      dt_nascimento: '1970-01-01', dt_iniciacao: '2010-01-01', observacoes: 'x'.repeat(200)
+    });
+    grande.dados.familiares.push({ id: i, obreiro_id: i, parentesco: 'cunhada', nome: `Cunhada ${i}` });
+  }
+  let t = Date.now();
+  const envGrande = criptoDesktop.cifrar(grande, SENHA);
+  const tCifra = Date.now() - t;
+  t = Date.now();
+  const abertoGrande = await criptoMobile.decifrar(envGrande, SENHA);
+  const tDecifra = Date.now() - t;
+
+  ok('80 obreiros: ida e volta correta',
+    abertoGrande.dados.obreiros.length === 80 && abertoGrande.dados.obreiros[79].nome === 'Irmão de Teste Número 79');
+  console.log(`      cifrar: ${tCifra} ms | decifrar: ${tDecifra} ms | arquivo: ${Math.round(JSON.stringify(envGrande).length / 1024)} KB`);
+  ok('tempo aceitável para um celular', tDecifra < 3000, tDecifra + ' ms');
+
+  console.log('\n' + (falhas ? ('FALHAS: ' + falhas) : 'CRIPTOGRAFIA VALIDADA NOS DOIS LADOS'));
+  process.exit(falhas ? 1 : 0);
+})();

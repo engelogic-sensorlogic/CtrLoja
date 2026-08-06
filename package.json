@@ -13,9 +13,10 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "test": "node test/teste-calendario.js && node --no-warnings test/teste-integracao.js && node --no-warnings test/teste-rotina.js && node --no-warnings test/teste-mobile.js",
+    "test": "node test/teste-calendario.js && node --no-warnings test/teste-integracao.js && node --no-warnings test/teste-rotina.js && node --no-warnings test/teste-mobile.js && node --no-warnings test/teste-cripto.js",
     "modelos": "node ferramentas/sincronizar-modelos.js",
     "verificar-pacote": "node ferramentas/verificar-pacote.js",
+    "publicar-dados": "node ferramentas/publicar-dados.js",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
     "pack": "electron-builder --win --x64 --dir",
     "dist": "electron-builder --win --x64"

@@ -233,6 +233,8 @@ call node --no-warnings test\teste-rotina.js
 if errorlevel 1 goto :FALHA
 call node --no-warnings test\teste-mobile.js
 if errorlevel 1 goto :FALHA
+call node --no-warnings test\teste-cripto.js
+if errorlevel 1 goto :FALHA
 echo.
 echo [3/3] Todos os testes passaram.
 goto :FIM
