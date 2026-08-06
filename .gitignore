@@ -26,3 +26,6 @@ backups/
 # Saidas do instalador
 installer/Output/
 installer/*.exe
+
+# Senha de publicacao (NUNCA versionar)
+.senha-publicacao

@@ -37,11 +37,45 @@ A partir daí você abre pelo ícone, sem digitar endereço.
 
 ### 3. Carregar os dados
 
-1. No computador: **CtrLoja → Configurações → Exportar banco de dados**
-2. Leve o arquivo `.ctrloja` para o celular (WhatsApp para si mesmo, e-mail, Drive, cabo)
-3. No app: aba **Dados** → **Carregar novo arquivo**
+**No computador**, sempre que alterar o cadastro:
 
-Repita esse passo sempre que alterar o cadastro no computador.
+```bat
+publicar-dados.bat      :: gera o pacote CIFRADO em mobile\dados\
+publicar-github.bat     :: envia ao repositório
+```
+
+**No celular**: aba **Dados** → **Buscar atualizações**. Na primeira vez ele pede a senha
+combinada entre os Irmãos; depois disso o aparelho lembra.
+
+O aplicativo consulta antes um arquivo de poucos bytes com a versão publicada. Se nada mudou,
+ele avisa e não baixa nada.
+
+> Também é possível carregar um arquivo `.ctrloja` à mão, pelo botão abaixo do Sincronizar.
+
+---
+
+## Segurança dos dados publicados
+
+O pacote vai ao repositório **cifrado com AES-256**, com chave derivada da senha por PBKDF2
+(310 mil iterações). Quem abrir o arquivo sem a senha vê apenas texto embaralhado.
+
+| Vai cifrado | Nem chega a sair do computador |
+|-------------|--------------------------------|
+| Obreiros, famílias, datas | Histórico de envios |
+| Calendário e sessões | Grupos do WhatsApp |
+| Modelos de mensagem | Configurações internas e CNPJ |
+
+A senha é combinada **de viva voz na Loja** e não aparece em lugar nenhum do código nem desta
+documentação. Maiúsculas e espaços sobrando não importam.
+
+Cuidados que valem lembrar:
+
+- **Senha curta ou previsível é o elo fraco.** A cifra é forte; a senha é que decide.
+  Palavras óbvias do vocabulário maçônico são as primeiras que alguém tentaria.
+- Ao trocar a senha, republique com `publicar-dados.bat` e avise os Irmãos: os aparelhos
+  vão pedir a nova na sincronização seguinte.
+- A sincronização exige **HTTPS**. Pelo GitHub Pages funciona; pelo endereço de IP da rede
+  local, não — o navegador não libera a criptografia fora de contexto seguro.
 
 ---
 
@@ -84,6 +118,14 @@ Três pontos:
 3. Se ainda assim não gostar do resultado, troque o emoji no modelo pelo desktop
    (**Modelos → Sessão da Loja**) e rode o `sincronizar-modelos.bat`. Símbolos como
    `⚜` e `📅` costumam ter suporte mais amplo que `🏛️`.
+
+---
+
+## Cargos
+
+A navegação se organiza por cargo: **Chancelaria**, **Secretaria**, **Tesouraria** e
+**Hospitalaria**. Hoje só a Chancelaria tem funções — agenda, efemérides e mensagens. As outras
+já aparecem na barra e serão preenchidas conforme forem definidas.
 
 ---
 

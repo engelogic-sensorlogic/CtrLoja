@@ -124,6 +124,12 @@ if errorlevel 1 (
   echo        Rode "rodar.bat testes" para ver os detalhes.
   goto :FALHA
 )
+call node --no-warnings test\teste-sincronizacao.js >nul 2>&1
+if errorlevel 1 (
+  echo [ERRO] Testes de sincronizacao falharam. Build interrompido.
+  echo        Rode "rodar.bat testes" para ver os detalhes.
+  goto :FALHA
+)
 call node --no-warnings test\teste-cripto.js >nul 2>&1
 if errorlevel 1 (
   echo [ERRO] Testes de criptografia falharam. Build interrompido.

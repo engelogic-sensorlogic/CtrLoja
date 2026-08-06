@@ -29,11 +29,23 @@ const TAM_TAG = 16;
 
 /* ------------------------------------------------------------------ */
 
-function validarSenha(senha) {
-  if (typeof senha !== 'string' || senha.length < 8) {
-    throw new Error('A senha precisa ter pelo menos 8 caracteres.');
-  }
-  return senha;
+/**
+ * A senha da Loja e combinada de viva voz entre os Irmaos, entao nao faz
+ * sentido cobrar exatidao de maiusculas nem tolerar espaco sobrando. A
+ * normalizacao abaixo e IDENTICA a de mobile/js/cripto.js - qualquer
+ * diferenca entre as duas impediria o celular de abrir o arquivo.
+ */
+function normalizarSenha(senha) {
+  if (typeof senha !== 'string') throw new Error('Informe a senha da Loja.');
+  const limpa = senha.trim().toLowerCase();
+  if (limpa.length < 4) throw new Error('A senha precisa ter pelo menos 4 caracteres.');
+  return limpa;
+}
+
+/** Senha curta ou previsivel: alerta, mas nao impede. A decisao e da Loja. */
+function senhaFraca(senha) {
+  const limpa = String(senha || '').trim().toLowerCase();
+  return limpa.length < 10;
 }
 
 function derivarChave(senha, sal, iteracoes) {
@@ -45,11 +57,11 @@ function derivarChave(senha, sal, iteracoes) {
  * @returns {object} envelope pronto para virar JSON e ser versionado no git
  */
 function cifrar(objeto, senha) {
-  validarSenha(senha);
+  const chaveTexto = normalizarSenha(senha);
 
   const sal = crypto.randomBytes(TAM_SAL);
   const iv = crypto.randomBytes(TAM_IV);
-  const chave = derivarChave(senha, sal, ITERACOES);
+  const chave = derivarChave(chaveTexto, sal, ITERACOES);
 
   const cifrador = crypto.createCipheriv('aes-256-gcm', chave, iv);
   const texto = Buffer.from(JSON.stringify(objeto), 'utf8');
@@ -87,7 +99,7 @@ function decifrar(envelope, senha) {
   if (envelope.versao !== VERSAO) {
     throw new Error(`Versão de criptografia não suportada: ${envelope.versao}.`);
   }
-  validarSenha(senha);
+  const chaveTexto = normalizarSenha(senha);
 
   const sal = Buffer.from(envelope.kdf.sal, 'base64');
   const iv = Buffer.from(envelope.cifra.iv, 'base64');
@@ -98,7 +110,7 @@ function decifrar(envelope, senha) {
   const parte = conteudo.subarray(0, conteudo.length - TAM_TAG);
   const tag = conteudo.subarray(conteudo.length - TAM_TAG);
 
-  const chave = derivarChave(senha, sal, envelope.kdf.iteracoes || ITERACOES);
+  const chave = derivarChave(chaveTexto, sal, envelope.kdf.iteracoes || ITERACOES);
   const decifrador = crypto.createDecipheriv('aes-256-gcm', chave, iv);
   decifrador.setAuthTag(tag);
 
@@ -119,4 +131,4 @@ function impressao(texto) {
   return crypto.createHash('sha256').update(texto, 'utf8').digest('hex');
 }
 
-module.exports = { cifrar, decifrar, impressao, FORMATO, VERSAO, ITERACOES };
+module.exports = { cifrar, decifrar, impressao, normalizarSenha, senhaFraca, FORMATO, VERSAO, ITERACOES };

@@ -51,6 +51,24 @@ html, body {
 .topo h1 { margin: 0; font-size: 17px; font-weight: 600; line-height: 1.25; }
 .topo p { margin: 2px 0 0; font-size: 12px; opacity: .9; }
 
+/* ---------------------- Cargos ---------------------- */
+
+.cargos {
+  display: flex; gap: 6px; overflow-x: auto; padding: 10px 12px;
+  background: var(--c-acento-escuro);
+  -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+.cargos::-webkit-scrollbar { display: none; }
+
+.cargo {
+  flex: 0 0 auto; padding: 8px 14px; border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, .35);
+  background: transparent; color: var(--c-branco);
+  font-size: 12.5px; font-family: inherit; white-space: nowrap; cursor: pointer;
+}
+.cargo.ativo { background: var(--c-branco); color: var(--c-acento-escuro); font-weight: 600; border-color: var(--c-branco); }
+.cargo.indisponivel { opacity: .55; }
+
 /* ---------------------- Abas ---------------------- */
 
 .abas {

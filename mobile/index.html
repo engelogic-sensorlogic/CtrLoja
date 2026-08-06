@@ -19,18 +19,16 @@
     <p id="subtituloLoja">Agenda da Loja no seu celular</p>
   </header>
 
-  <nav class="abas" id="abas" hidden>
-    <button class="aba ativa" data-aba="hoje">Hoje</button>
-    <button class="aba" data-aba="proximos">Próximos</button>
-    <button class="aba" data-aba="obreiros">Obreiros</button>
-    <button class="aba" data-aba="dados">Dados</button>
-  </nav>
+  <nav class="cargos" id="cargos" hidden></nav>
+  <nav class="abas" id="abas" hidden></nav>
 
   <main id="conteudo"></main>
 
   <input type="file" id="arquivo" accept=".ctrloja,.json,application/json" />
   <div class="toasts" id="toasts"></div>
 
+  <script src="js/cargos.js"></script>
+  <script src="js/cripto.js"></script>
   <script src="js/dados.js"></script>
   <script src="js/nucleo.js"></script>
   <script src="js/app.js"></script>

@@ -13,7 +13,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "test": "node test/teste-calendario.js && node --no-warnings test/teste-integracao.js && node --no-warnings test/teste-rotina.js && node --no-warnings test/teste-mobile.js && node --no-warnings test/teste-cripto.js",
+    "test": "node test/teste-calendario.js && node --no-warnings test/teste-integracao.js && node --no-warnings test/teste-rotina.js && node --no-warnings test/teste-mobile.js && node --no-warnings test/teste-cripto.js && node --no-warnings test/teste-sincronizacao.js",
     "modelos": "node ferramentas/sincronizar-modelos.js",
     "verificar-pacote": "node ferramentas/verificar-pacote.js",
     "publicar-dados": "node ferramentas/publicar-dados.js",

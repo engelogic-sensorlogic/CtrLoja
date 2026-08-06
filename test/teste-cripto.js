@@ -135,14 +135,28 @@ const criptoMobile = self.CtrLojaCripto;
   /* ---------------- validações ---------------- */
 
   console.log('\n== Validações ==');
-  try { criptoDesktop.cifrar(original, 'curta'); ok('exige senha de 8+ caracteres', false); }
-  catch (e) { ok('exige senha de 8+ caracteres', /8 caracteres/.test(e.message)); }
+  try { criptoDesktop.cifrar(original, 'abc'); ok('recusa senha curta demais', false); }
+  catch (e) { ok('recusa senha curta demais', /4 caracteres/.test(e.message)); }
 
   try { await criptoMobile.decifrar({ formato: 'outra-coisa' }, SENHA); ok('recusa arquivo estranho', false); }
   catch (e) { ok('recusa arquivo estranho', /não é um pacote cifrado/i.test(e.message)); }
 
   try { await criptoMobile.decifrar(envelope, ''); ok('exige a senha', false); }
-  catch (e) { ok('exige a senha', /Informe a senha/i.test(e.message)); }
+  catch (e) { ok('exige a senha', /4 caracteres|Informe a senha/i.test(e.message), e.message); }
+
+  /* ---------------- senha da Loja: maiúsculas não importam ---------------- */
+
+  console.log('\n== Senha combinada de viva voz ==');
+  const envMisto = criptoDesktop.cifrar(original, '  Senha-Da-Loja  ');
+  for (const variante of ['senha-da-loja', 'SENHA-DA-LOJA', 'Senha-Da-Loja', '   senha-da-loja   ']) {
+    const p = await criptoMobile.decifrar(envMisto, variante);
+    ok(`celular abre com "${variante.trim()}"`, p.dados.obreiros.length === 2);
+  }
+  ok('desktop e celular normalizam igual',
+    criptoDesktop.normalizarSenha('  ABC-def  ') === criptoMobile.normalizarSenha('  ABC-def  '),
+    criptoDesktop.normalizarSenha('  ABC-def  '));
+  ok('senha curta é sinalizada como fraca', criptoDesktop.senhaFraca('booz') === true);
+  ok('senha longa não é sinalizada', criptoDesktop.senhaFraca('booz-ufr-141-rolandia') === false);
 
   /* ---------------- impressão digital ---------------- */
 

@@ -15,6 +15,9 @@
   'use strict';
 
   const CHAVE = 'ctrloja.pacote';
+  const CHAVE_VERSAO = 'ctrloja.versao';
+  const CHAVE_SENHA = 'ctrloja.senha';
+  const ORIGEM_DADOS = 'dados/';
   const MESES_CURTO = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
   const MESES_LONGO = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
     'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
@@ -23,8 +26,11 @@
     pacote: null,
     banco: null,
     nucleo: null,
+    cargo: 'chancelaria',
     aba: 'hoje',
-    data: hojeISO()
+    data: hojeISO(),
+    versao: null,
+    sincronizando: false
   };
 
   /* ---------------- utilidades ---------------- */
@@ -142,6 +148,83 @@
     $('#tituloLoja').textContent = cfg.loja_nome || 'CtrLoja';
     $('#subtituloLoja').textContent = cfg.oriente || '';
     $('#abas').hidden = false;
+    $('#cargos').hidden = false;
+  }
+
+  /* ---------------- sincronização com o repositório ---------------- */
+
+  function versaoGuardada() {
+    try { return JSON.parse(localStorage.getItem(CHAVE_VERSAO) || 'null'); }
+    catch { return null; }
+  }
+
+  /**
+   * Busca a novidade publicada pelo computador.
+   *
+   * Primeiro lê o versao.json, que tem poucos bytes: se a impressão
+   * digital for a mesma já guardada, nada é baixado. Só havendo novidade
+   * é que vem o pacote cifrado.
+   */
+  async function sincronizar(forcar) {
+    if (app.sincronizando) return;
+    app.sincronizando = true;
+    pintar();
+
+    try {
+      if (!CtrLojaCripto.disponivel()) {
+        throw new Error(
+          'A sincronização exige conexão segura (HTTPS).\n\n'
+          + 'Abra o aplicativo pelo endereço publicado, não pelo endereço de IP da rede local.'
+        );
+      }
+
+      const resp = await fetch(ORIGEM_DADOS + 'versao.json?t=' + Date.now(), { cache: 'no-store' });
+      if (!resp.ok) {
+        throw new Error(resp.status === 404
+          ? 'Nenhum dado publicado ainda. No computador, use o publicar-dados.bat e depois o publicar-github.bat.'
+          : `Não foi possível consultar o servidor (${resp.status}).`);
+      }
+      const info = await resp.json();
+      if (info.formato !== 'ctrloja-versao') throw new Error('Resposta inesperada do servidor.');
+
+      const atual = versaoGuardada();
+      if (!forcar && atual && atual.impressao === info.impressao) {
+        aviso('Você já está com a versão mais recente (nº ' + info.versao + ').', 'ok');
+        return;
+      }
+
+      const respDados = await fetch(ORIGEM_DADOS + info.arquivo + '?v=' + info.versao, { cache: 'no-store' });
+      if (!respDados.ok) throw new Error(`Não foi possível baixar os dados (${respDados.status}).`);
+      const envelope = await respDados.json();
+
+      let senha = localStorage.getItem(CHAVE_SENHA);
+      if (!senha) {
+        senha = prompt('Senha da Loja\n\n(combinada entre os Irmãos; maiúsculas não importam)');
+        if (!senha) { aviso('Sincronização cancelada.', ''); return; }
+      }
+
+      let pacote;
+      try {
+        pacote = await CtrLojaCripto.decifrar(envelope, senha);
+      } catch (err) {
+        localStorage.removeItem(CHAVE_SENHA);      // senha guardada não serve mais
+        throw err;
+      }
+
+      CtrLojaDados.validarPacote(pacote);
+      await usarPacote(pacote, true);
+
+      localStorage.setItem(CHAVE_SENHA, senha);
+      localStorage.setItem(CHAVE_VERSAO, JSON.stringify(info));
+      app.versao = info;
+
+      aviso(`Atualizado para a versão ${info.versao} — ${app.banco.resumo.obreiros} obreiro(s).`, 'ok', 6000);
+    } catch (err) {
+      aviso(err.message || 'Falha ao sincronizar.', 'erro', 9000);
+    } finally {
+      app.sincronizando = false;
+      pintar();
+    }
   }
 
   function lerArquivo(file) {
@@ -169,12 +252,17 @@
       el('img', { src: 'icons/icone-192.png', alt: '' }),
       el('h2', { text: 'Carregue a agenda da Loja' }),
       el('p', {
-        html: 'No computador, abra o CtrLoja e vá em <strong>Configurações → Exportar banco de dados</strong>. '
-          + 'Passe o arquivo <strong>.ctrloja</strong> para o celular e selecione-o aqui.<br><br>'
+        html: 'Toque em <strong>Sincronizar</strong> para baixar a agenda publicada pela Loja. '
+          + 'Será pedida a senha combinada entre os Irmãos.<br><br>'
           + 'Os dados ficam somente neste aparelho.'
       }),
       el('button', {
-        class: 'btn largo', text: '📂 Selecionar arquivo .ctrloja',
+        class: 'btn largo', text: app.sincronizando ? 'Sincronizando…' : '🔄 Sincronizar agora',
+        disabled: app.sincronizando, onclick: () => sincronizar(true)
+      }),
+      el('p', { style: 'font-size:12.5px;color:var(--c-texto-suave);margin:16px 0 8px', text: 'ou, se você tem o arquivo em mãos:' }),
+      el('button', {
+        class: 'btn secundario largo', text: '📂 Carregar arquivo .ctrloja',
         onclick: () => $('#arquivo').click()
       })
     ]);
@@ -366,13 +454,24 @@
       el('div', { class: 'item-lista' }, [el('strong', { text: r.modelos + ' modelos de mensagem' })])
     ]));
 
+    const v = app.versao || versaoGuardada();
     caixa.appendChild(el('div', { class: 'cartao' }, [
-      el('h2', { text: 'Atualizar' }),
+      el('h2', { text: 'Sincronizar com a Loja' }),
       el('p', {
         style: 'font-size:13.5px;color:var(--c-texto-suave);line-height:1.5;margin-top:0',
-        text: 'Sempre que alterar o cadastro no computador, exporte um novo arquivo .ctrloja e carregue-o aqui.'
+        text: v
+          ? `Você está na versão ${v.versao}, publicada em ${new Date(v.gerado_em).toLocaleString('pt-BR')}.`
+          : 'Ainda não sincronizou com o repositório da Loja.'
       }),
-      el('button', { class: 'btn largo', text: '📂 Carregar novo arquivo', onclick: () => $('#arquivo').click() })
+      el('button', {
+        class: 'btn largo', text: app.sincronizando ? 'Sincronizando…' : '🔄 Buscar atualizações',
+        disabled: app.sincronizando, onclick: () => sincronizar(false)
+      }),
+      el('div', { style: 'height:8px' }),
+      el('button', {
+        class: 'btn secundario largo', text: '📂 Carregar arquivo .ctrloja',
+        onclick: () => $('#arquivo').click()
+      })
     ]));
 
     caixa.appendChild(el('div', { class: 'cartao' }, [
@@ -380,15 +479,19 @@
       el('p', {
         style: 'font-size:13.5px;color:var(--c-texto-suave);line-height:1.5;margin:0 0 14px',
         text: 'Os dados dos Irmãos e de suas famílias ficam guardados apenas neste aparelho. '
-          + 'Nada é enviado para servidores. As mensagens saem pelo seu WhatsApp, sem automação.'
+          + 'O arquivo publicado pela Loja é cifrado: sem a senha, não passa de texto embaralhado. '
+          + 'As mensagens saem pelo seu WhatsApp, sem automação.'
       }),
       el('button', {
         class: 'btn secundario largo', text: '🗑 Apagar os dados deste celular',
         onclick: () => {
           if (!confirm('Apagar a agenda guardada neste celular? Você precisará carregar o arquivo novamente.')) return;
           localStorage.removeItem(CHAVE);
-          app.pacote = null; app.banco = null; app.nucleo = null;
+          localStorage.removeItem(CHAVE_VERSAO);
+          localStorage.removeItem(CHAVE_SENHA);
+          app.pacote = null; app.banco = null; app.nucleo = null; app.versao = null;
           $('#abas').hidden = true;
+          $('#cargos').hidden = true;
           $('#tituloLoja').textContent = 'CtrLoja';
           $('#subtituloLoja').textContent = 'Agenda da Loja no seu celular';
           pintar();
@@ -400,6 +503,17 @@
     return caixa;
   }
 
+  function telaEmConstrucao(cargo) {
+    return el('div', { class: 'cartao importar' }, [
+      el('div', { style: 'font-size:46px;margin-bottom:10px', text: cargo.icone }),
+      el('h2', { text: cargo.nome }),
+      el('p', { text: cargo.descricao }),
+      el('div', { class: 'aviso info', style: 'text-align:left' },
+        [document.createTextNode('Este cargo ainda não tem funções no aplicativo. '
+          + 'A estrutura já está pronta: as telas entram aqui conforme forem definidas.')])
+    ]);
+  }
+
   /* ---------------- desenho ---------------- */
 
   function pintar() {
@@ -408,33 +522,63 @@
 
     if (!app.banco) { alvo.appendChild(telaImportar()); return; }
 
-    document.querySelectorAll('.aba').forEach((b) => {
-      b.classList.toggle('ativa', b.dataset.aba === app.aba);
-    });
+    pintarCargos();
+    pintarAbas();
+
+    const cargo = CtrLojaCargos.obter(app.cargo);
 
     try {
-      if (app.aba === 'hoje') alvo.appendChild(telaHoje());
+      if (app.aba === 'dados') alvo.appendChild(telaDados());
+      else if (!cargo.disponivel) alvo.appendChild(telaEmConstrucao(cargo));
+      else if (app.aba === 'hoje') alvo.appendChild(telaHoje());
       else if (app.aba === 'proximos') alvo.appendChild(telaProximos());
       else if (app.aba === 'obreiros') alvo.appendChild(telaObreiros());
-      else alvo.appendChild(telaDados());
+      else alvo.appendChild(telaEmConstrucao(cargo));
     } catch (err) {
       alvo.appendChild(el('div', { class: 'aviso erro', text: 'Erro ao montar a tela: ' + err.message }));
     }
     window.scrollTo(0, 0);
   }
 
+  function pintarCargos() {
+    const barra = $('#cargos');
+    barra.innerHTML = '';
+    for (const c of CtrLojaCargos.lista) {
+      barra.appendChild(el('button', {
+        class: 'cargo' + (c.chave === app.cargo ? ' ativo' : '') + (c.disponivel ? '' : ' indisponivel'),
+        text: `${c.icone} ${c.nome}`,
+        onclick: () => {
+          app.cargo = c.chave;
+          const abas = CtrLojaCargos.abasDe(c.chave);
+          app.aba = abas[0].chave;
+          pintar();
+        }
+      }));
+    }
+  }
+
+  function pintarAbas() {
+    const barra = $('#abas');
+    barra.innerHTML = '';
+    for (const a of CtrLojaCargos.abasDe(app.cargo)) {
+      barra.appendChild(el('button', {
+        class: 'aba' + (a.chave === app.aba ? ' ativa' : ''),
+        text: a.nome,
+        onclick: () => { app.aba = a.chave; pintar(); }
+      }));
+    }
+  }
+
   /* ---------------- início ---------------- */
 
   document.addEventListener('DOMContentLoaded', async () => {
-    document.querySelectorAll('.aba').forEach((b) => {
-      b.addEventListener('click', () => { app.aba = b.dataset.aba; pintar(); });
-    });
-
     $('#arquivo').addEventListener('change', (ev) => {
       const f = ev.target.files && ev.target.files[0];
       if (f) lerArquivo(f);
       ev.target.value = '';
     });
+
+    app.versao = versaoGuardada();
 
     const guardado = localStorage.getItem(CHAVE);
     if (guardado) {

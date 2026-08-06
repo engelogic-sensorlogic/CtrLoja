@@ -21,6 +21,17 @@
 
   const disponivel = () => !!(raiz.crypto && raiz.crypto.subtle);
 
+  /* A senha e combinada de viva voz na Loja: espaco sobrando e maiuscula
+     nao podem atrapalhar. Esta normalizacao e IDENTICA a do desktop em
+     src/main/services/cripto.js - se as duas divergirem, o arquivo nao
+     abre no celular. O teste test/teste-cripto.js cobre isso. */
+  function normalizarSenha(senha) {
+    if (typeof senha !== 'string') throw new Error('Informe a senha da Loja.');
+    const limpa = senha.trim().toLowerCase();
+    if (limpa.length < 4) throw new Error('A senha precisa ter pelo menos 4 caracteres.');
+    return limpa;
+  }
+
   function paraBytes(b64) {
     const bruto = atob(b64);
     const saida = new Uint8Array(bruto.length);
@@ -65,7 +76,7 @@
     if (envelope.versao !== VERSAO) {
       throw new Error(`Versão de criptografia não suportada: ${envelope.versao}.`);
     }
-    if (!senha) throw new Error('Informe a senha da Loja.');
+    const chaveTexto = normalizarSenha(senha);
 
     const sal = paraBytes(envelope.kdf.sal);
     const iv = paraBytes(envelope.cifra.iv);
@@ -73,7 +84,7 @@
 
     if (conteudo.length <= TAM_TAG) throw new Error('Arquivo cifrado incompleto.');
 
-    const chave = await derivarChave(senha, sal, envelope.kdf.iteracoes || 310000);
+    const chave = await derivarChave(chaveTexto, sal, envelope.kdf.iteracoes || 310000);
 
     let aberto;
     try {
@@ -97,5 +108,5 @@
       .join('');
   }
 
-  raiz.CtrLojaCripto = { decifrar, impressao, disponivel, FORMATO, VERSAO };
+  raiz.CtrLojaCripto = { decifrar, impressao, disponivel, normalizarSenha, FORMATO, VERSAO };
 }(typeof self !== 'undefined' ? self : this));
