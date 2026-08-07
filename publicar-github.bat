@@ -126,8 +126,20 @@ if "%SUJO1%%SUJO2%" NEQ "00" (
   echo       Ha alteracoes ainda nao commitadas:
   git status --short
   echo.
-  set /p "MSG=      Mensagem do commit (ENTER cancela): "
+  REM  O prompt vai num ECHO separado de proposito.
+  REM  Com a pagina de codigo UTF-8 (chcp 65001), o cmd.exe NAO mostra o
+  REM  texto do proprio SET /P - ele fica esperando a resposta com a tela
+  REM  em branco, como se tivesse travado. Escrevendo a pergunta antes,
+  REM  com ECHO, ela aparece sempre.
+  echo       Descreva o que mudou. Exemplo:
+  echo         Lista de presenca, cargos com senha e tela inicial publica
+  echo.
+  echo       ^(deixe em branco e tecle ENTER para cancelar^)
+  echo.
+  set "MSG="
+  set /p "MSG=      Mensagem do commit: "
   if "!MSG!"=="" (
+    echo.
     echo       Cancelado. Nada foi enviado.
     pause
     exit /b 0

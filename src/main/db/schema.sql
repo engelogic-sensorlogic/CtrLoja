@@ -123,6 +123,23 @@ CREATE TABLE IF NOT EXISTS sessoes (
 );
 CREATE INDEX IF NOT EXISTS idx_sessoes_data ON sessoes(data);
 
+-- Lista de presenca dos Obreiros nas sessoes --------------------------
+-- Uma linha por Obreiro por sessao. A ausencia de linha significa que a
+-- chamada daquela sessao ainda nao foi feita; presente = 0 e falta
+-- registrada. A chave unica permite reenviar a mesma lista sem duplicar.
+CREATE TABLE IF NOT EXISTS presencas (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  sessao_data     TEXT    NOT NULL,             -- YYYY-MM-DD, casa com sessoes.data
+  obreiro_id      INTEGER NOT NULL REFERENCES obreiros(id) ON DELETE CASCADE,
+  presente        INTEGER DEFAULT 0,            -- 1 = presente | 0 = ausente
+  origem          TEXT,                         -- celular | pc
+  registrado_por  TEXT,                         -- quem fez a chamada
+  registrado_em   TEXT    DEFAULT (datetime('now','localtime')),
+  UNIQUE(sessao_data, obreiro_id)
+);
+CREATE INDEX IF NOT EXISTS idx_presencas_sessao ON presencas(sessao_data);
+CREATE INDEX IF NOT EXISTS idx_presencas_obreiro ON presencas(obreiro_id);
+
 -- Controle para evitar disparo duplicado no mesmo dia ------------------
 CREATE TABLE IF NOT EXISTS controle_disparo (
   data_ref        TEXT PRIMARY KEY,

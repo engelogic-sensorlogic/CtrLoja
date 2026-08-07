@@ -148,6 +148,18 @@ if errorlevel 1 (
   echo        Rode "rodar.bat testes" para ver os detalhes.
   goto :FALHA
 )
+call node --no-warnings test\teste-telas-celular.js >nul 2>&1
+if errorlevel 1 (
+  echo [ERRO] Testes das telas do celular falharam. Build interrompido.
+  echo        Rode "rodar.bat testes" para ver os detalhes.
+  goto :FALHA
+)
+call node --no-warnings test\teste-presenca.js >nul 2>&1
+if errorlevel 1 (
+  echo [ERRO] Testes da lista de presenca falharam. Build interrompido.
+  echo        Rode "rodar.bat testes" para ver os detalhes.
+  goto :FALHA
+)
 echo       OK: todos os testes passaram.
 
 REM ------------------------------------------------------------------

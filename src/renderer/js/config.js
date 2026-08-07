@@ -278,6 +278,93 @@ App.views.config = {
       el('div', { class: 'aviso info', style: 'margin-top:12px', html: 'Use <strong>Exportar</strong> para gerar um arquivo <code>.ctrloja</code> e levar os dados para outra instalação do programa em outro computador.' })
     ]);
 
+    /* --------- Senhas dos Cargos (aplicativo do celular) --------- */
+    /*
+       Fica FORA do formulário de propósito: estes campos não podem
+       entrar no FormData e virar configuração gravada em texto.
+       O que se grava é só a impressão digital da senha.
+    */
+    const CARGOS_APP = [
+      ['chancelaria', 'Chancelaria', 'Agenda, efemérides e mensagens'],
+      ['secretaria', 'Secretaria', 'Balaústres, presenças e correspondência'],
+      ['tesouraria', 'Tesouraria', 'Mensalidades, caixa e prestação de contas'],
+      ['hospitalaria', 'Hospitalaria', 'Tronco de beneficência e assistência']
+    ];
+
+    const boxCargos = el('div');
+
+    async function pintarCargos() {
+      const estado = await tentar(window.api.cargos.estado()) || [];
+      const mapa = {};
+      for (const e of estado) mapa[e.cargo] = e.definida;
+
+      boxCargos.innerHTML = '';
+      const tbody = el('tbody');
+
+      for (const [chave, nome, descricao] of CARGOS_APP) {
+        const definida = !!mapa[chave];
+        const entrada = el('input', {
+          type: 'password', placeholder: definida ? 'digite para trocar…' : 'defina uma senha…',
+          autocomplete: 'new-password'
+        });
+
+        const aplicar = async () => {
+          const valor = entrada.value.trim();
+          if (valor.length < 4) { toast('A senha precisa ter pelo menos 4 caracteres.', 'erro'); return; }
+          const r = await tentar(window.api.cargos.definirSenha(chave, valor), 'Falha ao definir a senha');
+          if (!r) return;
+          entrada.value = '';
+          toast(`Senha da ${nome} definida.`, 'ok');
+          if (r.fraca) toast('Senha curta. Prefira algo com 10 caracteres ou mais.', '', 7000);
+          pintarCargos();
+        };
+
+        entrada.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); aplicar(); } });
+
+        tbody.appendChild(el('tr', {}, [
+          el('td', { style: 'width:150px' }, [
+            el('div', { style: 'font-weight:600', text: nome }),
+            el('small', { style: 'color:var(--c-texto-suave)', text: descricao })
+          ]),
+          el('td', {
+            style: `width:110px;font-weight:600;color:${definida ? 'var(--c-ok)' : 'var(--c-erro)'}`,
+            text: definida ? '🔒 protegido' : '🔓 aberto'
+          }),
+          el('td', {}, [entrada]),
+          el('td', { style: 'width:210px' }, [
+            el('div', { class: 'linha compacta' }, [
+              el('button', { class: 'btn', text: definida ? 'Trocar' : 'Definir', onclick: aplicar }),
+              definida ? el('button', {
+                class: 'btn secundario', text: 'Remover',
+                onclick: async () => {
+                  if (!await confirmar(`Remover a senha da ${nome}? O cargo ficará aberto a qualquer Irmão que tenha o aplicativo.`)) return;
+                  const r = await tentar(window.api.cargos.definirSenha(chave, ''), 'Falha ao remover');
+                  if (r) { toast(`Senha da ${nome} removida.`, 'ok'); pintarCargos(); }
+                }
+              }) : null
+            ])
+          ])
+        ]));
+      }
+
+      boxCargos.appendChild(el('table', {}, [tbody]));
+    }
+
+    const cardCargos = el('div', { class: 'cartao' }, [
+      el('h3', { text: 'Senhas dos Cargos — aplicativo do celular' }),
+      el('p', {
+        style: 'font-size:12.5px;color:var(--c-texto-suave);line-height:1.6;margin-top:0',
+        html: 'A <strong>senha da Loja</strong> abre a agenda e todos os Irmãos a possuem — ela não separa o que é de cada Cargo. '
+          + 'Cada Cargo tem a sua senha, entregue apenas ao oficial que o ocupa. '
+          + 'Sem senha definida, o Cargo fica aberto no celular de qualquer Irmão.'
+      }),
+      boxCargos,
+      el('div', { class: 'aviso info', style: 'margin-top:12px' , html:
+        'A senha não é guardada em lugar nenhum: grava-se apenas a sua <strong>impressão digital</strong>. '
+        + 'Nem este programa consegue mostrá-la de volta — só trocar ou remover. '
+        + 'Depois de definir, publique com <code>publicar-dados.bat</code> para que os celulares recebam.' })
+    ]);
+
     /* --------- Montagem --------- */
     const form = el('form', { id: 'formConfig' }, [cardLoja, cardTitulos, cardDisparo, cardEventos]);
 
@@ -307,9 +394,11 @@ App.views.config = {
     alvo.appendChild(form);
     alvo.appendChild(cardCheck);
     alvo.appendChild(cardRotina);
+    alvo.appendChild(cardCargos);
     alvo.appendChild(cardBanco);
     await pintarCheck();
     await pintarRotina();
+    await pintarCargos();
 
     async function salvarConfig() {
       const fd = new FormData(form);

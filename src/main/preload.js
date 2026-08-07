@@ -61,6 +61,22 @@ contextBridge.exposeInMainWorld('api', {
     salvar: (mapa) => call('config:salvar', mapa)
   },
 
+  cargos: {
+    estado: () => call('cargos:estado'),
+    definirSenha: (cargo, senha) => call('cargos:definir-senha', cargo, senha)
+  },
+
+  presenca: {
+    lista: (data) => call('presenca:lista', data),
+    sessoes: (limite) => call('presenca:sessoes', limite),
+    estatisticas: (filtro) => call('presenca:estatisticas', filtro),
+    historicoObreiro: (id, filtro) => call('presenca:historico-obreiro', id, filtro),
+    salvar: (reg) => call('presenca:salvar', reg),
+    limpar: (data) => call('presenca:limpar', data),
+    lerPacote: (origem, conteudo) => call('presenca:ler-pacote', origem, conteudo),
+    exportarPdf: (data) => call('presenca:exportar-pdf', data)
+  },
+
   rotina: {
     estado: () => call('rotina:estado'),
     executar: (forcar) => call('rotina:executar', forcar),

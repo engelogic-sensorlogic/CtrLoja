@@ -131,4 +131,63 @@ function impressao(texto) {
   return crypto.createHash('sha256').update(texto, 'utf8').digest('hex');
 }
 
-module.exports = { cifrar, decifrar, impressao, normalizarSenha, senhaFraca, FORMATO, VERSAO, ITERACOES };
+/* ------------------------------------------------------------------ */
+/*  Senhas dos Cargos                                                  */
+/* ------------------------------------------------------------------ */
+/*
+ * A senha da Loja abre o pacote e TODOS os Irmaos a possuem. Ela nao
+ * serve, portanto, para separar o que e de cada Cargo.
+ *
+ * Cada Cargo tem a sua senha, definida pelo Veneravel no computador. O
+ * que viaja no pacote publicado NAO e a senha, e sim a sua impressao
+ * digital: PBKDF2-SHA256 com sal proprio. Assim, mesmo um Irmao que
+ * abriu o pacote com a senha da Loja - e portanto ve todo o conteudo -
+ * nao consegue ler a senha de um Cargo que nao e o dele.
+ *
+ * Vale ser honesto sobre o alcance disto: os dados ja estao no aparelho
+ * depois de sincronizados, entao a senha do Cargo e uma tranca da porta,
+ * nao um cofre. Ela impede o uso indevido das funcoes do Cargo por quem
+ * pega o celular, o que e exatamente o problema que se quer resolver.
+ */
+
+const FORMATO_SENHA = 'ctrloja-senha-cargo';
+
+/**
+ * Impressao digital de uma senha de Cargo, para guardar na configuracao.
+ * @returns {object} envelope sem nada que permita recuperar a senha
+ */
+function hashSenhaCargo(senha) {
+  const limpa = normalizarSenha(senha);
+  const sal = crypto.randomBytes(TAM_SAL);
+  const hash = crypto.pbkdf2Sync(Buffer.from(limpa, 'utf8'), sal, ITERACOES, 32, 'sha256');
+  return {
+    formato: FORMATO_SENHA,
+    versao: 1,
+    algoritmo: 'PBKDF2-SHA256',
+    iteracoes: ITERACOES,
+    sal: sal.toString('base64'),
+    hash: hash.toString('base64')
+  };
+}
+
+/** Confere a senha digitada contra a impressao guardada. */
+function conferirSenhaCargo(envelope, senha) {
+  if (!envelope || envelope.formato !== FORMATO_SENHA) return false;
+  let limpa;
+  try { limpa = normalizarSenha(senha); } catch { return false; }
+
+  const sal = Buffer.from(envelope.sal, 'base64');
+  const esperado = Buffer.from(envelope.hash, 'base64');
+  const obtido = crypto.pbkdf2Sync(
+    Buffer.from(limpa, 'utf8'), sal, envelope.iteracoes || ITERACOES, esperado.length, 'sha256'
+  );
+  // Comparacao de tempo constante: nao entrega, pelo relogio, quantos
+  // caracteres iniciais estavam certos.
+  return crypto.timingSafeEqual(obtido, esperado);
+}
+
+module.exports = {
+  cifrar, decifrar, impressao, normalizarSenha, senhaFraca,
+  hashSenhaCargo, conferirSenhaCargo,
+  FORMATO, FORMATO_SENHA, VERSAO, ITERACOES
+};

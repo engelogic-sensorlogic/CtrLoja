@@ -10,6 +10,10 @@ const templates = require('./services/templates');
 const backup = require('./services/backup');
 const scheduler = require('./services/scheduler');
 const whatsapp = require('./services/whatsapp');
+const cripto = require('./services/cripto');
+const presenca = require('./services/presenca');
+const presencaPacote = require('./services/presenca-pacote');
+const presencaPdf = require('./services/presenca-pdf');
 
 const isDev = process.argv.includes('--dev');
 
@@ -44,7 +48,14 @@ if (process.platform === 'win32' &&
   app.commandLine.appendSwitch('no-sandbox');
   app.commandLine.appendSwitch('disable-gpu');
   app.commandLine.appendSwitch('disable-gpu-sandbox');
-  app.commandLine.appendSwitch('disable-software-rasterizer');
+  app.commandLine.appendSwitch('disable-gpu-compositing');
+
+  // ATENCAO: NAO acrescentar --disable-software-rasterizer aqui.
+  //
+  // Com a GPU ja desligada logo acima, esse switch tira TAMBEM o
+  // desenho por software (SwiftShader) - e ai nao sobra quem desenhe.
+  // O resultado e a janela abrir com a cor de fundo e nada dentro,
+  // sem erro nenhum no console. Foi exatamente o que aconteceu.
   console.log('[ctrloja] Modo compatibilidade gráfica ativado (unidade de rede/mapeada).');
 }
 
@@ -264,6 +275,143 @@ handle('config:salvar', (mapa) => {
   db.config.salvarVarias(mapa);
   scheduler.reagendar();
   return db.config.obterTodas();
+});
+
+/* ------------------------------------------------------------------ */
+/* IPC - Lista de presenca                                             */
+/* ------------------------------------------------------------------ */
+
+handle('presenca:lista', (data) => presenca.listaDaSessao(data));
+handle('presenca:sessoes', (limite) => presenca.sessoesParaChamada(limite));
+handle('presenca:estatisticas', (filtro) => presenca.estatisticas(filtro || {}));
+handle('presenca:historico-obreiro', (id, filtro) => presenca.historicoDoObreiro(id, filtro || {}));
+
+handle('presenca:salvar', (reg) => {
+  const r = db.presencas.registrarLista(Object.assign({ origem: 'pc' }, reg));
+  return Object.assign(r, { lista: presenca.listaDaSessao(reg.sessao_data) });
+});
+
+handle('presenca:limpar', (data) => {
+  db.presencas.limparSessao(data);
+  return presenca.listaDaSessao(data);
+});
+
+/**
+ * Le a lista vinda do celular - do arquivo .presenca ou do texto colado
+ * do WhatsApp - e devolve o que MUDARIA, sem gravar nada. Quem grava e o
+ * canal presenca:salvar, depois de o usuario conferir na tela.
+ */
+handle('presenca:ler-pacote', async (origem, conteudo) => {
+  let texto = conteudo;
+
+  if (origem === 'arquivo') {
+    const res = await dialog.showOpenDialog(mainWindow, {
+      title: 'Importar lista de presença',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Lista de presença', extensions: ['presenca', 'json', 'txt'] },
+        { name: 'Todos', extensions: ['*'] }
+      ]
+    });
+    if (res.canceled) return { cancelado: true };
+    texto = fs.readFileSync(res.filePaths[0], 'utf8');
+  }
+
+  const pacote = presencaPacote.deTexto(texto);
+
+  // Traduz os ids em nomes para que a conferência na tela seja legível
+  const nomes = new Map(db.obreiros.listar({}).map((o) => [o.id, o]));
+  const anterior = new Map(db.presencas.porSessao(pacote.data)
+    .map((p) => [p.obreiro_id, !!Number(p.presente)]));
+
+  const itens = pacote.itens.map(([id, presente]) => {
+    const o = nomes.get(id);
+    return {
+      obreiro_id: id,
+      nome: o ? o.nome : null,
+      tratamento: o ? (o.tratamento || '') : '',
+      grau: o ? (o.grau || '') : '',
+      presente: !!presente,
+      desconhecido: !o,
+      mudou: anterior.has(id) ? anterior.get(id) !== !!presente : true
+    };
+  });
+
+  const sessao = db.sessoes.obterPorData(pacote.data);
+
+  return {
+    cancelado: false,
+    pacote,
+    itens,
+    sessao: sessao || null,
+    ja_existia: anterior.size > 0,
+    desconhecidos: itens.filter((i) => i.desconhecido).length,
+    mudancas: itens.filter((i) => i.mudou).length
+  };
+});
+
+handle('presenca:exportar-pdf', async (data) => {
+  const lista = presenca.listaDaSessao(data);
+  if (!lista.itens.length) throw new Error('Não há Obreiros no quadro para esta sessão.');
+
+  const sugestao = `Lista de Presenca - ${data}.pdf`;
+  const res = await dialog.showSaveDialog(mainWindow, {
+    title: 'Exportar lista de presença em PDF',
+    defaultPath: path.join(app.getPath('documents'), sugestao),
+    filters: [{ name: 'PDF', extensions: ['pdf'] }]
+  });
+  if (res.canceled) return { cancelado: true };
+
+  const raiz = resolveAppRoot();
+  const exts = ['.png', '.jpg', '.jpeg', '.webp', '.svg'];
+  const acharLogo = (base) => {
+    for (const ext of exts) {
+      const p = path.join(raiz, base + ext);
+      if (fs.existsSync(p)) return p;
+    }
+    return null;
+  };
+
+  const r = await presencaPdf.gerar(
+    BrowserWindow, res.filePath, lista, db.config.obterTodas(),
+    { logo1: acharLogo('Logo1'), logo2: acharLogo('Logo2') }
+  );
+  return Object.assign({ cancelado: false }, r);
+});
+
+/* ------------------------------------------------------------------ */
+/* IPC - Senhas dos Cargos (usadas no aplicativo do celular)           */
+/* ------------------------------------------------------------------ */
+/*
+ * A senha NUNCA e guardada. Grava-se apenas a sua impressao digital,
+ * que e o que viaja no pacote publicado. Nem esta tela consegue mostrar
+ * de volta uma senha ja definida - so trocar ou remover.
+ */
+
+const CARGOS_APP = ['chancelaria', 'secretaria', 'tesouraria', 'hospitalaria'];
+const chaveSenhaCargo = (c) => 'senha_cargo_' + c;
+
+handle('cargos:estado', () => {
+  const cfg = db.config.obterTodas();
+  return CARGOS_APP.map((c) => {
+    let env = null;
+    try { env = JSON.parse(cfg[chaveSenhaCargo(c)] || 'null'); } catch { env = null; }
+    return { cargo: c, definida: !!(env && env.formato === cripto.FORMATO_SENHA) };
+  });
+});
+
+handle('cargos:definir-senha', (cargo, senha) => {
+  if (!CARGOS_APP.includes(cargo)) throw new Error('Cargo desconhecido: ' + cargo);
+
+  // Texto vazio remove a senha e deixa o cargo aberto no celular.
+  if (!senha) {
+    db.config.salvarVarias({ [chaveSenhaCargo(cargo)]: '' });
+    return { cargo, definida: false };
+  }
+
+  const envelope = cripto.hashSenhaCargo(senha);
+  db.config.salvarVarias({ [chaveSenhaCargo(cargo)]: JSON.stringify(envelope) });
+  return { cargo, definida: true, fraca: cripto.senhaFraca(senha) };
 });
 
 /* ------------------------------------------------------------------ */

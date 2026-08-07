@@ -32,12 +32,22 @@ const ok = (n, c, e = '') => {
 
 const TIPOS = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.css': 'text/css' };
 
-function subirServidor() {
+const PREFIXO_DADOS = 'mobile/dados/';
+
+/**
+ * Serve a raiz do projeto, MENOS mobile/dados/, que vem da pasta
+ * temporaria do teste. Assim o pacote de verdade - o que voce publicou
+ * com o publicar-dados.bat - nunca e tocado por uma rodada de testes.
+ */
+function subirServidor(dirDados) {
   return new Promise((resolve) => {
     const servidor = http.createServer((req, res) => {
       const rel = decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '');
-      const arquivo = path.join(RAIZ, rel);
-      if (!arquivo.startsWith(RAIZ) || !fs.existsSync(arquivo) || fs.statSync(arquivo).isDirectory()) {
+      const arquivo = rel.startsWith(PREFIXO_DADOS)
+        ? path.join(dirDados, rel.slice(PREFIXO_DADOS.length))
+        : path.join(RAIZ, rel);
+      const permitido = arquivo.startsWith(RAIZ) || arquivo.startsWith(dirDados);
+      if (!permitido || !fs.existsSync(arquivo) || fs.statSync(arquivo).isDirectory()) {
         res.writeHead(404); res.end('nao encontrado'); return;
       }
       res.writeHead(200, { 'Content-Type': TIPOS[path.extname(arquivo)] || 'application/octet-stream' });
@@ -65,15 +75,29 @@ function subirServidor() {
   db.grupos.sincronizar([{ id: '111@g.us', nome: 'Grupo Reservado da Loja' }]);
   db.envios.registrar({ data_ref: '2026-08-03', evento_tipo: 'x', mensagem: 'envio antigo', status: 'enviado' });
 
+  // Senha do Cargo definida no computador, como faz a tela de Configurações
+  const criptoPC = require(path.join(RAIZ, 'src', 'main', 'services', 'cripto.js'));
+  const SENHA_CHANCELARIA = 'chanceler-da-ufr-141';
+  db.config.salvarVarias({
+    senha_cargo_chancelaria: JSON.stringify(criptoPC.hashSenhaCargo(SENHA_CHANCELARIA))
+  });
+
   const backup = path.join(tmp, 'origem.ctrloja');
   require(path.join(RAIZ, 'src', 'main', 'services', 'backup.js')).exportar(backup);
 
   console.log('== Publicação ==');
-  execFileSync(process.execPath, [path.join(RAIZ, 'ferramentas', 'publicar-dados.js'), backup], {
-    cwd: RAIZ, env: { ...process.env, CTRLOJA_SENHA: SENHA_TESTE }, stdio: 'pipe'
-  });
 
-  const dirDados = path.join(RAIZ, 'mobile', 'dados');
+  // Publica numa pasta temporaria: o pacote de verdade em mobile/dados/
+  // nao pode ser sobrescrito nem apagado por uma rodada de testes.
+  const dirDados = path.join(tmp, 'publicado');
+  execFileSync(process.execPath, [
+    path.join(RAIZ, 'ferramentas', 'publicar-dados.js'), backup, '--destino', dirDados
+  ], { cwd: RAIZ, env: { ...process.env, CTRLOJA_SENHA: SENHA_TESTE }, stdio: 'pipe' });
+
+  ok('publicou fora da pasta do repositório',
+    !fs.existsSync(path.join(RAIZ, 'mobile', 'dados', 'agenda.enc'))
+    || fs.readFileSync(path.join(RAIZ, 'mobile', 'dados', 'agenda.enc'), 'utf8')
+      !== fs.readFileSync(path.join(dirDados, 'agenda.enc'), 'utf8'));
   ok('agenda.enc gerado', fs.existsSync(path.join(dirDados, 'agenda.enc')));
   ok('versao.json gerado', fs.existsSync(path.join(dirDados, 'versao.json')));
 
@@ -83,7 +107,7 @@ function subirServidor() {
 
   /* ---- 2. Servidor e ambiente de navegador ---- */
 
-  const servidor = await subirServidor();
+  const servidor = await subirServidor(dirDados);
   const BASE = `http://127.0.0.1:${servidor.address().port}/mobile/`;
 
   const self = { crypto: globalThis.crypto, TextEncoder, TextDecoder, atob, console, URL };
@@ -97,16 +121,30 @@ function subirServidor() {
 
   /* ---- 3. Estrutura de cargos ---- */
 
-  console.log('\n== Cargos ==');
+  console.log('\n== Áreas: Início público + quatro Cargos ==');
   const cargos = self.CtrLojaCargos;
-  ok('quatro cargos declarados', cargos.lista.length === 4, cargos.lista.map((c) => c.nome).join(', '));
-  ok('apenas a Chancelaria implementada',
-    cargos.lista.filter((c) => c.disponivel).map((c) => c.chave).join() === 'chancelaria');
-  ok('Chancelaria: Hoje, Próximos, Obreiros e Dados',
-    cargos.abasDe('chancelaria').map((a) => a.chave).join() === 'hoje,proximos,obreiros,dados');
+  ok('Início e mais quatro Cargos', cargos.lista.length === 5, cargos.lista.map((c) => c.nome).join(', '));
+  ok('Início é a área padrão e é pública',
+    cargos.PADRAO === 'inicio' && cargos.obter('inicio').publico === true);
+  ok('nenhum Cargo é público',
+    cargos.lista.filter((c) => c.chave !== 'inicio').every((c) => c.publico === false));
+
+  ok('Início: Hoje, Próximos, Presença e Dados',
+    cargos.abasDe('inicio').map((a) => a.chave).join() === 'hoje,proximos,presenca,dados',
+    cargos.abasDe('inicio').map((a) => a.chave).join());
+  ok('Início não tem disparo, nem Obreiros, nem a chamada',
+    !cargos.abasDe('inicio').some((a) => ['mensagens', 'obreiros', 'chamada'].includes(a.chave)));
+
+  ok('Chancelaria: Mensagens, Presença, Obreiros e Solicitar',
+    cargos.abasDe('chancelaria').map((a) => a.chave).join() === 'mensagens,chamada,obreiros,solicitar',
+    cargos.abasDe('chancelaria').map((a) => a.chave).join());
+  ok('Chancelaria é a única implementada',
+    cargos.lista.filter((c) => c.disponivel).map((c) => c.chave).join() === 'inicio,chancelaria');
   for (const c of ['secretaria', 'tesouraria', 'hospitalaria']) {
-    ok(`${c} mostra apenas Dados`, cargos.abasDe(c).map((a) => a.chave).join() === 'dados');
+    ok(`${c} ainda sem abas próprias`, cargos.abasDe(c).length === 0);
   }
+  ok('a chave da senha segue o padrão publicado',
+    cargos.chaveSenha('chancelaria') === 'senha_cargo_chancelaria');
 
   /* ---- 4. Sincronizacao ---- */
 
@@ -130,6 +168,25 @@ function subirServidor() {
     chaves.length + ' chaves publicadas');
   ok('configurações usadas nas mensagens vieram',
     chaves.includes('loja_nome') && chaves.includes('titulo_obreiro'));
+
+  /* ---- 4b. Senha do Cargo: viaja como impressão, nunca em texto ---- */
+
+  console.log('\n== Senha do Cargo no pacote publicado ==');
+  const linhaSenha = (pacote.dados.config || []).find((c) => c.chave === 'senha_cargo_chancelaria');
+  ok('impressão da senha da Chancelaria foi publicada', !!linhaSenha);
+  ok('a senha do Cargo NÃO viaja em texto',
+    !bruto.includes(SENHA_CHANCELARIA) && !JSON.stringify(pacote).includes(SENHA_CHANCELARIA));
+
+  const envSenha = JSON.parse(linhaSenha.valor);
+  ok('formato de impressão digital', envSenha.formato === 'ctrloja-senha-cargo');
+  ok('celular destrava com a senha certa',
+    await self.CtrLojaCripto.conferirSenhaCargo(envSenha, SENHA_CHANCELARIA.toUpperCase()) === true);
+  ok('celular recusa a senha errada',
+    await self.CtrLojaCripto.conferirSenhaCargo(envSenha, 'chanceler-da-ufr-142') === false);
+  ok('a senha da Loja não destrava o Cargo',
+    await self.CtrLojaCripto.conferirSenhaCargo(envSenha, SENHA_TESTE) === false);
+  ok('Cargo sem senha definida não tem impressão publicada',
+    !(pacote.dados.config || []).some((c) => c.chave === 'senha_cargo_tesouraria'));
 
   /* ---- 5. Agenda a partir do pacote sincronizado ---- */
 
@@ -160,11 +217,7 @@ function subirServidor() {
 
   servidor.close();
 
-  // Limpa os artefatos de teste para não irem ao repositório
-  for (const f of ['agenda.enc', 'versao.json']) {
-    const p = path.join(dirDados, f);
-    if (fs.existsSync(p)) fs.unlinkSync(p);
-  }
+  // Nada a limpar: tudo foi gravado na pasta temporária do teste.
 
   console.log('\n' + (falhas ? ('FALHAS: ' + falhas) : 'CICLO PUBLICAR → SINCRONIZAR VALIDADO'));
   process.exit(falhas ? 1 : 0);

@@ -147,6 +147,37 @@
       obterPorData(data) { return tabela('sessoes').find((s) => s.data === data) || undefined; }
     };
 
+    /* A ordenacao repete a do SQLite (ORDER BY sessao_data, obreiro_id)
+       para que a estatistica saia igual nos dois lados. */
+    const presencas = {
+      todas() {
+        return tabela('presencas').slice()
+          .sort((a, b) => bin(a.sessao_data, b.sessao_data) || (a.obreiro_id - b.obreiro_id));
+      },
+      porSessao(data) {
+        return tabela('presencas').filter((p) => p.sessao_data === data)
+          .sort((a, b) => a.obreiro_id - b.obreiro_id);
+      },
+      porObreiro(obreiroId) {
+        return tabela('presencas').filter((p) => p.obreiro_id === Number(obreiroId))
+          .sort((a, b) => bin(a.sessao_data, b.sessao_data));
+      },
+      datasComChamada() {
+        const vistas = [];
+        for (const p of tabela('presencas')) {
+          if (vistas.indexOf(p.sessao_data) < 0) vistas.push(p.sessao_data);
+        }
+        return vistas.sort(bin);
+      },
+      temChamada(data) {
+        return tabela('presencas').some((p) => p.sessao_data === data);
+      },
+      // No celular a gravacao acontece na tela, nao no banco: a lista
+      // marcada volta ao computador pelo arquivo .presenca.
+      registrarLista() { throw new Error('O celular não grava presença; envie a lista ao computador.'); },
+      limparSessao() { /* somente leitura */ }
+    };
+
     const templates = {
       obter(chave) {
         return tabela('templates').find((t) => t.chave === chave && verdadeiro(t.ativo));
@@ -169,14 +200,15 @@
     };
 
     return {
-      config, obreiros, datas, sessoes, templates, grupos, envios,
+      config, obreiros, datas, sessoes, presencas, templates, grupos, envios,
       resumo: {
         gerado_em: pacote.gerado_em || null,
         obreiros: tabela('obreiros').length,
         familiares: tabela('familiares').length,
         datas: tabela('datas_calendario').length,
         sessoes: tabela('sessoes').length,
-        modelos: tabela('templates').length
+        modelos: tabela('templates').length,
+        chamadas: presencas.datasComChamada().length
       }
     };
   }

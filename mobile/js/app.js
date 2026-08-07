@@ -2,13 +2,24 @@
    CtrLoja Mobile — interface
    ==================================================================
 
-   Somente consulta e disparo MANUAL: o aplicativo monta a mensagem e
-   entrega o texto pronto ao WhatsApp do proprio aparelho. Quem envia e
-   o WhatsApp, pelo caminho oficial — nao ha automacao, nao ha risco de
+   O aplicativo e distribuido a todos os Irmaos da Loja e se divide em
+   dois niveis:
+
+     INICIO   aberto, somente leitura. Eventos do dia, agenda da Loja e
+              os proximos acontecimentos. Sem texto de mensagem e sem
+              botao de envio.
+
+     CARGOS   protegidos por senha propria. Dentro deles ficam as
+              funcoes de trabalho: disparar as mensagens e solicitar a
+              inclusao de informacoes.
+
+   O disparo e sempre MANUAL: o aplicativo monta a mensagem e entrega o
+   texto pronto ao WhatsApp do proprio aparelho. Quem envia e o
+   WhatsApp, pelo caminho oficial - nao ha automacao, nao ha risco de
    bloqueio da conta.
 
-   Os dados vem do arquivo .ctrloja exportado pelo CtrLoja do computador
-   e ficam guardados apenas neste celular.
+   Os dados vem do pacote cifrado publicado pelo CtrLoja do computador e
+   ficam guardados apenas neste celular.
    ================================================================== */
 
 (function () {
@@ -16,11 +27,12 @@
 
   // Aparece na aba Dados. Serve para conferir, de olho, se o aparelho
   // esta mesmo com a ultima versao publicada do aplicativo.
-  const VERSAO_APP = '2026.08.06-2';
+  const VERSAO_APP = '2026.08.06-4';
 
   const CHAVE = 'ctrloja.pacote';
   const CHAVE_VERSAO = 'ctrloja.versao';
   const CHAVE_SENHA = 'ctrloja.senha';
+  const CHAVE_DESTRAVADOS = 'ctrloja.destravados';
   const ORIGEM_DADOS = 'dados/';
   const MESES_CURTO = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
   const MESES_LONGO = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
@@ -30,11 +42,16 @@
     pacote: null,
     banco: null,
     nucleo: null,
-    cargo: 'chancelaria',
+    area: 'inicio',
     aba: 'hoje',
     data: hojeISO(),
     versao: null,
-    sincronizando: false
+    sincronizando: false,
+    conferindo: false,
+    // Chamada em andamento: sessão escolhida, marcações e quem a faz
+    chamadaData: null,
+    chamadaMarcados: null,
+    chamadaPor: ''
   };
 
   /* ---------------- utilidades ---------------- */
@@ -127,6 +144,53 @@
       catch (e) { aviso('Não foi possível copiar neste aparelho.', 'erro'); }
       ta.remove();
     }
+  }
+
+  /* ---------------- trancas dos Cargos ---------------- */
+  /*
+     A senha de cada Cargo e conferida contra a impressao digital que
+     veio no pacote. O destravamento vale enquanto o aplicativo estiver
+     aberto (sessionStorage): fechou, tranca de novo.
+
+     Sejamos francos sobre o alcance: os dados ja estao no aparelho
+     depois de sincronizados. A senha do Cargo e a tranca da porta, nao
+     um cofre - ela impede que quem pegue o celular use as funcoes do
+     Cargo, que e o problema real.
+  */
+
+  function destravados() {
+    try { return new Set(JSON.parse(sessionStorage.getItem(CHAVE_DESTRAVADOS) || '[]')); }
+    catch { return new Set(); }
+  }
+
+  function gravarDestravados(conjunto) {
+    try { sessionStorage.setItem(CHAVE_DESTRAVADOS, JSON.stringify([...conjunto])); }
+    catch { /* aparelho sem sessionStorage: a tranca vale só nesta tela */ }
+  }
+
+  /** Impressao digital publicada para o Cargo, ou null se nao ha senha. */
+  function envelopeSenha(chaveArea) {
+    if (!app.banco) return null;
+    const cfg = app.banco.config.obterTodas();
+    const bruto = cfg[CtrLojaCargos.chaveSenha(chaveArea)];
+    if (!bruto) return null;
+    try {
+      const env = JSON.parse(bruto);
+      return env && env.formato === CtrLojaCripto.FORMATO_SENHA ? env : null;
+    } catch { return null; }
+  }
+
+  function liberado(chaveArea) {
+    const area = CtrLojaCargos.obter(chaveArea);
+    if (area.publico) return true;
+    if (!envelopeSenha(chaveArea)) return true;      // sem senha definida: aberto
+    return destravados().has(chaveArea);
+  }
+
+  function trancar(chaveArea) {
+    const c = destravados();
+    c.delete(chaveArea);
+    gravarDestravados(c);
   }
 
   /* ---------------- dados ---------------- */
@@ -238,6 +302,7 @@
         const pacote = JSON.parse(leitor.result);
         CtrLojaDados.validarPacote(pacote);
         await usarPacote(pacote, true);
+        app.area = 'inicio';
         app.aba = 'hoje';
         pintar();
         aviso('Dados carregados. ' + app.banco.resumo.obreiros + ' obreiro(s).', 'ok');
@@ -272,45 +337,9 @@
     ]);
   }
 
-  function cartaoEvento(item, mostrarData) {
-    const iso = item.data;
-    const dia = iso.slice(8, 10);
-    const mes = MESES_CURTO[Number(iso.slice(5, 7)) - 1];
-
-    const detalhe = (item.categoria === 'obreiro' || item.categoria === 'familiar')
-      ? `${item.rotulo || ''}${item.anos !== null && item.anos !== undefined ? ' — ' + item.anos + ' ano(s)' : ''}`
-      : (item.rotulo || '');
-
-    const bloco = el('div', { class: 'evento' + (item.bloqueado ? ' bloqueado' : '') }, [
-      el('div', { class: 'evento-topo' }, [
-        mostrarData ? el('div', { class: 'evento-data' }, [
-          el('span', { class: 'd', text: dia }),
-          el('span', { class: 'm', text: mes })
-        ]) : null,
-        el('div', { class: 'evento-info' }, [
-          el('strong', { text: (item.titulo_pessoa ? item.titulo_pessoa + ' ' : '') + (item.nome || item.evento || '') }),
-          el('small', { text: detalhe })
-        ]),
-        el('span', { class: 'tag ' + item.categoria, text: rotuloCategoria(item.categoria) })
-      ])
-    ]);
-
-    if (item.bloqueado) {
-      bloco.appendChild(el('div', { class: 'mensagem', style: 'font-style:italic', text: item.motivo_bloqueio || 'Não é comunicado.' }));
-      return bloco;
-    }
-
-    bloco.appendChild(el('pre', { class: 'mensagem', text: item.mensagem || '' }));
-    bloco.appendChild(el('div', { class: 'acoes' }, [
-      el('button', { class: 'btn zap', text: '📤 Enviar', onclick: () => enviarPeloWhatsApp(item.mensagem) }),
-      el('button', { class: 'btn secundario', text: 'Copiar', onclick: () => copiar(item.mensagem) })
-    ]));
-    return bloco;
-  }
-
-  function telaHoje() {
+  /* --- navegacao de data, usada em Inicio e na Chancelaria --- */
+  function linhaData() {
     const caixa = el('div');
-
     const seletor = el('input', { type: 'date', value: app.data });
     seletor.addEventListener('change', () => { app.data = seletor.value || hojeISO(); pintar(); });
 
@@ -326,7 +355,129 @@
         text: 'Voltar para hoje', onclick: () => { app.data = hojeISO(); pintar(); }
       }));
     }
+    return caixa;
+  }
 
+  /* --- cartao de evento --- */
+
+  function cabecalhoEvento(item, mostrarData) {
+    const iso = item.data || '';
+    return el('div', { class: 'evento-topo' }, [
+      mostrarData && iso ? el('div', { class: 'evento-data' }, [
+        el('span', { class: 'd', text: iso.slice(8, 10) }),
+        el('span', { class: 'm', text: MESES_CURTO[Number(iso.slice(5, 7)) - 1] })
+      ]) : null,
+      el('div', { class: 'evento-info' }, [
+        el('strong', { text: (item.titulo_pessoa ? item.titulo_pessoa + ' ' : '') + (item.nome || item.evento || '') }),
+        el('small', {
+          text: (item.categoria === 'obreiro' || item.categoria === 'familiar')
+            ? `${item.rotulo || ''}${item.anos !== null && item.anos !== undefined ? ' — ' + item.anos + ' ano(s)' : ''}`
+            : (item.rotulo || '')
+        })
+      ]),
+      el('span', { class: 'tag ' + item.categoria, text: rotuloCategoria(item.categoria) })
+    ]);
+  }
+
+  /**
+   * Cartao para a area publica: informa, nao age.
+   * Nada de texto de mensagem nem de botao de envio - isso e do Cargo.
+   */
+  function cartaoLeitura(item, mostrarData) {
+    const bloco = el('div', { class: 'evento leitura' }, [cabecalhoEvento(item, mostrarData)]);
+
+    if (item.categoria === 'sessao') {
+      bloco.classList.add('com-detalhe');
+      const detalhes = [
+        item.hora_sessao ? 'Às ' + item.hora_sessao : null,
+        item.local_sessao || null
+      ].filter(Boolean).join(' · ');
+
+      if (detalhes) bloco.appendChild(el('div', { class: 'sessao-detalhe', text: detalhes }));
+
+      const pauta = String(item.agenda_dia || '').trim();
+      bloco.appendChild(pauta
+        ? el('div', { class: 'pauta' }, [
+          el('h4', { text: 'Agenda do Dia' }),
+          el('pre', { text: pauta })
+        ])
+        : el('div', { class: 'sessao-detalhe', style: 'font-style:italic', text: 'Agenda do dia ainda não publicada.' }));
+    }
+
+    return bloco;
+  }
+
+  /** Cartao para dentro do Cargo: traz o texto pronto e os botoes. */
+  function cartaoAcao(item, mostrarData) {
+    const bloco = el('div', { class: 'evento' + (item.bloqueado ? ' bloqueado' : '') }, [
+      cabecalhoEvento(item, mostrarData)
+    ]);
+
+    if (item.bloqueado) {
+      bloco.appendChild(el('div', { class: 'mensagem', style: 'font-style:italic', text: item.motivo_bloqueio || 'Não é comunicado.' }));
+      return bloco;
+    }
+
+    bloco.appendChild(el('pre', { class: 'mensagem', text: item.mensagem || '' }));
+    bloco.appendChild(el('div', { class: 'acoes' }, [
+      el('button', { class: 'btn zap', text: '📤 Enviar', onclick: () => enviarPeloWhatsApp(item.mensagem) }),
+      el('button', { class: 'btn secundario', text: 'Copiar', onclick: () => copiar(item.mensagem) })
+    ]));
+    return bloco;
+  }
+
+  /* --- Inicio: Hoje (somente leitura) --- */
+
+  function telaHojePublico() {
+    const caixa = linhaData();
+    const fila = app.nucleo.agenda.montarFila(app.data);
+
+    caixa.appendChild(el('div', { class: 'aviso info', text: dataExtenso(app.data) + ' — ' + fila.total + ' evento(s)' }));
+
+    if (!fila.total) {
+      caixa.appendChild(el('div', { class: 'cartao' }, [
+        el('div', { class: 'vazio', text: 'Nenhum evento nesta data.' })
+      ]));
+      return caixa;
+    }
+
+    for (const item of fila.itens) caixa.appendChild(cartaoLeitura(item, false));
+    return caixa;
+  }
+
+  /* --- Proximos (lista) --- */
+
+  function telaProximos() {
+    const caixa = el('div');
+    const dias = 30;
+    const inicio = hojeISO();
+    const lista = app.nucleo.agenda.eventosDoPeriodo(inicio, somarDias(inicio, dias));
+
+    caixa.appendChild(el('div', { class: 'aviso info', text: 'Próximos ' + dias + ' dias' }));
+
+    if (!lista.length) {
+      caixa.appendChild(el('div', { class: 'cartao' }, [el('div', { class: 'vazio', text: 'Nenhum evento no período.' })]));
+      return caixa;
+    }
+
+    const abaDia = CtrLojaCargos.obter(app.area).publico ? 'hoje' : 'mensagens';
+
+    for (const dia of lista) {
+      for (const evt of dia.eventos) {
+        const cartao = el('div', { class: 'evento lista' + (evt.bloqueado ? ' bloqueado' : '') }, [
+          cabecalhoEvento(Object.assign({}, evt, { data: dia.data }), true)
+        ]);
+        cartao.addEventListener('click', () => { app.data = dia.data; app.aba = abaDia; pintar(); });
+        caixa.appendChild(cartao);
+      }
+    }
+    return caixa;
+  }
+
+  /* --- Chancelaria: Mensagens (com disparo) --- */
+
+  function telaMensagens() {
+    const caixa = linhaData();
     const fila = app.nucleo.agenda.montarFila(app.data);
 
     caixa.appendChild(el('div', { class: 'aviso info', text: dataExtenso(app.data) + ' — ' + fila.total + ' evento(s)' }));
@@ -357,44 +508,11 @@
       caixa.appendChild(el('div', { class: 'aviso', text: 'Abaixo, os mesmos eventos separados — caso prefira enviar um a um.' }));
     }
 
-    for (const item of fila.itens) caixa.appendChild(cartaoEvento(item, false));
+    for (const item of fila.itens) caixa.appendChild(cartaoAcao(item, false));
     return caixa;
   }
 
-  function telaProximos() {
-    const caixa = el('div');
-    const dias = 30;
-    const inicio = hojeISO();
-    const lista = app.nucleo.agenda.eventosDoPeriodo(inicio, somarDias(inicio, dias));
-
-    caixa.appendChild(el('div', { class: 'aviso info', text: 'Próximos ' + dias + ' dias' }));
-
-    if (!lista.length) {
-      caixa.appendChild(el('div', { class: 'cartao' }, [el('div', { class: 'vazio', text: 'Nenhum evento no período.' })]));
-      return caixa;
-    }
-
-    for (const dia of lista) {
-      for (const evt of dia.eventos) {
-        const cartao = el('div', { class: 'evento' + (evt.bloqueado ? ' bloqueado' : '') }, [
-          el('div', { class: 'evento-topo' }, [
-            el('div', { class: 'evento-data' }, [
-              el('span', { class: 'd', text: dia.data.slice(8, 10) }),
-              el('span', { class: 'm', text: MESES_CURTO[Number(dia.data.slice(5, 7)) - 1] })
-            ]),
-            el('div', { class: 'evento-info' }, [
-              el('strong', { text: (evt.titulo_pessoa ? evt.titulo_pessoa + ' ' : '') + (evt.nome || evt.evento || '') }),
-              el('small', { text: evt.rotulo || '' })
-            ]),
-            el('span', { class: 'tag ' + evt.categoria, text: rotuloCategoria(evt.categoria) })
-          ])
-        ]);
-        cartao.addEventListener('click', () => { app.data = dia.data; app.aba = 'hoje'; pintar(); });
-        caixa.appendChild(cartao);
-      }
-    }
-    return caixa;
-  }
+  /* --- Chancelaria: Obreiros --- */
 
   function telaObreiros() {
     const caixa = el('div');
@@ -409,7 +527,7 @@
       el('div', { class: 'metrica' }, [el('div', { class: 'valor', text: String(sobrinhos) }), el('div', { class: 'rotulo', text: 'Sobrinhos(as)' })])
     ]));
 
-    const busca = el('input', { type: 'search', placeholder: 'Buscar Irmão…', style: 'width:100%;padding:11px;font-size:15px;font-family:inherit;border:1px solid var(--c-borda);border-radius:10px;margin-bottom:12px' });
+    const busca = el('input', { type: 'search', placeholder: 'Buscar Irmão…', class: 'busca' });
     caixa.appendChild(busca);
 
     const cartao = el('div', { class: 'cartao' });
@@ -445,6 +563,433 @@
     return caixa;
   }
 
+  /* --- Gráficos, desenhados à mão em SVG --- */
+  /*
+     Nenhuma biblioteca: o aplicativo precisa abrir sem internet e um
+     gráfico de barras é meia dúzia de retângulos. Menos peso, menos
+     dependência e o desenho combina com as cores da Loja.
+  */
+
+  function svg(tag, attrs, filhos) {
+    const n = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for (const k in (attrs || {})) {
+      if (attrs[k] === null || attrs[k] === undefined) continue;
+      n.setAttribute(k, attrs[k]);
+    }
+    for (const f of [].concat(filhos || [])) if (f) n.appendChild(f);
+    return n;
+  }
+
+  /** Barras verticais: comparecimento sessão a sessão. */
+  function graficoSessoes(linhas) {
+    const dados = linhas.slice(-12);              // últimas doze cabem na tela
+    if (!dados.length) return null;
+
+    const L = 300, A = 132, base = A - 22, topo = 12;
+    const largura = L / dados.length;
+    const barra = Math.min(largura * 0.6, 26);
+
+    const g = svg('svg', { viewBox: `0 0 ${L} ${A}`, class: 'grafico', role: 'img' });
+
+    // Linha da média, para dar referência ao olho
+    const media = dados.reduce((s, d) => s + d.percentual, 0) / dados.length;
+    const yMedia = base - (media / 100) * (base - topo);
+    g.appendChild(svg('line', {
+      x1: 0, y1: yMedia, x2: L, y2: yMedia,
+      stroke: 'var(--c-acento)', 'stroke-width': 1, 'stroke-dasharray': '4 3', opacity: '.5'
+    }));
+
+    dados.forEach((d, i) => {
+      const altura = Math.max(2, (d.percentual / 100) * (base - topo));
+      const x = i * largura + (largura - barra) / 2;
+      g.appendChild(svg('rect', {
+        x, y: base - altura, width: barra, height: altura, rx: 3,
+        fill: d.percentual >= media ? 'var(--c-acento)' : '#8FC4DA'
+      }));
+      g.appendChild(svg('text', {
+        x: x + barra / 2, y: base - altura - 3, 'text-anchor': 'middle',
+        'font-size': '8', fill: 'var(--c-texto-suave)'
+      }, [document.createTextNode(String(d.presentes))]));
+      g.appendChild(svg('text', {
+        x: x + barra / 2, y: A - 6, 'text-anchor': 'middle',
+        'font-size': '8', fill: 'var(--c-texto-suave)'
+      }, [document.createTextNode(d.data.slice(8, 10) + '/' + d.data.slice(5, 7))]));
+    });
+
+    return g;
+  }
+
+  /** Barra horizontal de proporção, usada na frequência de cada Irmão. */
+  function barraPercentual(pct) {
+    const fora = el('div', { class: 'barra' });
+    fora.appendChild(el('div', {
+      class: 'barra-dentro' + (pct >= 75 ? ' boa' : (pct >= 50 ? ' media' : ' baixa')),
+      style: 'width:' + Math.max(2, Math.min(100, pct)) + '%'
+    }));
+    return fora;
+  }
+
+  /* --- Início: relatório de presença, aberto a todos --- */
+
+  function telaPresencaPublica() {
+    const caixa = el('div');
+    const est = app.nucleo.presenca.estatisticas({});
+
+    if (!est.total_sessoes) {
+      caixa.appendChild(el('div', { class: 'cartao' }, [
+        el('div', { class: 'vazio', text: 'Nenhuma chamada registrada ainda.' })
+      ]));
+      caixa.appendChild(el('div', {
+        class: 'aviso info',
+        text: 'A lista de presença é feita pela Chancelaria durante a sessão. '
+          + 'Assim que for enviada ao computador e publicada, o relatório aparece aqui.'
+      }));
+      return caixa;
+    }
+
+    caixa.appendChild(el('div', { class: 'metricas', style: 'margin-bottom:12px' }, [
+      el('div', { class: 'metrica' }, [
+        el('div', { class: 'valor', text: String(est.total_sessoes) }),
+        el('div', { class: 'rotulo', text: 'Sessões' })
+      ]),
+      el('div', { class: 'metrica' }, [
+        el('div', { class: 'valor', text: String(est.media_presentes) }),
+        el('div', { class: 'rotulo', text: 'Média presentes' })
+      ]),
+      el('div', { class: 'metrica' }, [
+        el('div', { class: 'valor', text: est.percentual_medio + '%' }),
+        el('div', { class: 'rotulo', text: 'Comparecimento' })
+      ])
+    ]));
+
+    const grafico = graficoSessoes(est.sessoes);
+    if (grafico) {
+      caixa.appendChild(el('div', { class: 'cartao' }, [
+        el('h2', { text: 'Comparecimento por sessão' }),
+        grafico,
+        el('p', {
+          class: 'legenda',
+          text: 'Cada barra é uma sessão; o número acima é quantos Irmãos compareceram. '
+            + 'A linha tracejada marca a média do período.'
+        })
+      ]));
+    }
+
+    if (est.ultima) {
+      const u = est.ultima;
+      caixa.appendChild(el('div', { class: 'cartao' }, [
+        el('h2', { text: 'Última sessão com chamada' }),
+        el('div', { class: 'item-lista' }, [
+          el('strong', { text: dataExtenso(u.data) }),
+          el('small', { text: u.rotulo || '' }),
+          el('small', { text: `${u.presentes} presentes de ${u.total} — ${u.percentual}%` })
+        ])
+      ]));
+    }
+
+    const lista = el('div', { class: 'cartao' }, [el('h2', { text: 'Frequência dos Irmãos' })]);
+    for (const o of est.obreiros) {
+      lista.appendChild(el('div', { class: 'item-lista' }, [
+        el('div', { class: 'freq-topo' }, [
+          el('strong', { text: (o.tratamento || '') + ' ' + o.nome }),
+          el('span', { class: 'freq-pct', text: o.percentual + '%' })
+        ]),
+        barraPercentual(o.percentual),
+        el('small', { text: `${o.presencas} presenças em ${o.chamadas} sessões` })
+      ]));
+    }
+    caixa.appendChild(lista);
+
+    return caixa;
+  }
+
+  /* --- Chancelaria: fazer a chamada --- */
+  /*
+     O celular não grava no banco da Loja. A lista marcada aqui vira um
+     pacote que o Chanceler manda ao PC Mestre - por arquivo ou pelo
+     WhatsApp - e é lá que ela entra no cadastro.
+  */
+
+  function telaChamada() {
+    const caixa = el('div');
+    const sessoes = app.nucleo.presenca.sessoesParaChamada(60);
+
+    if (!sessoes.length) {
+      caixa.appendChild(el('div', { class: 'cartao' }, [
+        el('div', { class: 'vazio', text: 'Nenhuma sessão cadastrada na Agenda da Loja.' })
+      ]));
+      return caixa;
+    }
+
+    if (!app.chamadaData || !sessoes.some((s) => s.data === app.chamadaData)) {
+      // Abre na sessão mais próxima de hoje, que é quase sempre a de agora
+      const hoje = hojeISO();
+      const passadas = sessoes.filter((s) => s.data <= hoje);
+      app.chamadaData = (passadas[0] || sessoes[sessoes.length - 1]).data;
+      app.chamadaMarcados = null;
+    }
+
+    const seletor = el('select', { class: 'campo-largo' });
+    for (const s of sessoes) {
+      seletor.appendChild(el('option', {
+        value: s.data,
+        selected: s.data === app.chamadaData,
+        text: `${s.data.slice(8, 10)}/${s.data.slice(5, 7)}/${s.data.slice(0, 4)} — ${s.rotulo}`
+          + (s.tem_chamada ? '  ✓' : '')
+      }));
+    }
+    seletor.addEventListener('change', () => {
+      app.chamadaData = seletor.value;
+      app.chamadaMarcados = null;
+      pintar();
+    });
+
+    const lista = app.nucleo.presenca.listaDaSessao(app.chamadaData);
+
+    // Marcações desta tela; partem do que já veio registrado
+    if (!app.chamadaMarcados) {
+      app.chamadaMarcados = {};
+      for (const i of lista.itens) app.chamadaMarcados[i.obreiro_id] = i.presente;
+    }
+
+    const responsavel = el('input', {
+      type: 'text', class: 'campo-largo', placeholder: 'Quem está fazendo a chamada',
+      value: app.chamadaPor || ''
+    });
+    responsavel.addEventListener('input', () => { app.chamadaPor = responsavel.value; });
+
+    caixa.appendChild(el('div', { class: 'cartao' }, [
+      el('h2', { text: 'Lista de Presença' }),
+      el('label', { class: 'campo-mobile' }, [el('span', { text: 'Sessão' }), seletor]),
+      el('div', { class: 'sessao-resumo' }, [
+        el('div', { text: dataExtenso(app.chamadaData) }),
+        el('strong', { text: lista.rotulo || 'Sessão sem grau definido' }),
+        lista.hora ? el('small', { text: 'Às ' + lista.hora }) : null
+      ]),
+      lista.tem_chamada
+        ? el('div', { class: 'aviso info', text: 'Esta sessão já tem chamada registrada. Reenviar substitui a anterior.' })
+        : null,
+      el('label', { class: 'campo-mobile' }, [el('span', { text: 'Chamada feita por' }), responsavel])
+    ]));
+
+    /* --- contador e marcação em massa --- */
+
+    const contador = el('div', { class: 'contador' });
+    const cartaoLista = el('div', { class: 'cartao' });
+
+    function atualizarContador() {
+      const marcados = lista.itens.filter((i) => app.chamadaMarcados[i.obreiro_id]).length;
+      contador.innerHTML = '';
+      contador.appendChild(el('strong', { text: `${marcados} de ${lista.total} presentes` }));
+      contador.appendChild(el('span', {
+        text: lista.total ? Math.round((marcados / lista.total) * 100) + '%' : '0%'
+      }));
+    }
+
+    caixa.appendChild(el('div', { class: 'cartao' }, [
+      contador,
+      el('div', { class: 'linha-botoes' }, [
+        el('button', {
+          class: 'btn secundario', text: '✓ Marcar todos',
+          onclick: () => {
+            for (const i of lista.itens) app.chamadaMarcados[i.obreiro_id] = true;
+            pintarItens(); atualizarContador();
+          }
+        }),
+        el('button', {
+          class: 'btn secundario', text: '✗ Desmarcar todos',
+          onclick: () => {
+            for (const i of lista.itens) app.chamadaMarcados[i.obreiro_id] = false;
+            pintarItens(); atualizarContador();
+          }
+        })
+      ])
+    ]));
+
+    function pintarItens() {
+      cartaoLista.innerHTML = '';
+      if (!lista.itens.length) {
+        cartaoLista.appendChild(el('div', { class: 'vazio', text: 'Nenhum Obreiro ativo no quadro.' }));
+        return;
+      }
+      for (const i of lista.itens) {
+        const marca = el('input', { type: 'checkbox', class: 'marca' });
+        marca.checked = !!app.chamadaMarcados[i.obreiro_id];
+        marca.addEventListener('change', () => {
+          app.chamadaMarcados[i.obreiro_id] = marca.checked;
+          linha.classList.toggle('presente', marca.checked);
+          atualizarContador();
+        });
+
+        const linha = el('label', { class: 'chamada-item' + (marca.checked ? ' presente' : '') }, [
+          marca,
+          el('div', { class: 'chamada-nome' }, [
+            el('strong', { text: (i.tratamento || '') + ' ' + i.nome }),
+            el('small', { text: i.grau || '' })
+          ])
+        ]);
+        cartaoLista.appendChild(linha);
+      }
+    }
+
+    pintarItens();
+    atualizarContador();
+    caixa.appendChild(cartaoLista);
+
+    /* --- fechamento: volta ao PC Mestre --- */
+
+    function montarPacote() {
+      const cfg = app.banco.config.obterTodas();
+      return app.nucleo.presencaPacote.montar({
+        data: app.chamadaData,
+        grau: lista.grau,
+        tipo: lista.tipo,
+        loja: cfg.loja_nome || '',
+        chamadaPor: (app.chamadaPor || '').trim() || null,
+        itens: lista.itens.map((i) => ({
+          obreiro_id: i.obreiro_id,
+          presente: !!app.chamadaMarcados[i.obreiro_id]
+        }))
+      });
+    }
+
+    function baixarArquivo() {
+      try {
+        const pacote = montarPacote();
+        const nome = app.nucleo.presencaPacote.nomeArquivo(pacote);
+        const blob = new Blob([JSON.stringify(pacote, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = el('a', { href: url, download: nome });
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+        aviso('Arquivo ' + nome + ' salvo. Leve-o ao computador e use Importar presença.', 'ok', 8000);
+      } catch (err) {
+        aviso(err.message || 'Falha ao gerar o arquivo.', 'erro', 7000);
+      }
+    }
+
+    function enviarWhatsApp() {
+      try {
+        const pacote = montarPacote();
+        enviarPeloWhatsApp(app.nucleo.presencaPacote.paraTexto(pacote, dataExtenso(pacote.data)));
+      } catch (err) {
+        aviso(err.message || 'Falha ao montar a mensagem.', 'erro', 7000);
+      }
+    }
+
+    caixa.appendChild(el('div', { class: 'cartao' }, [
+      el('h2', { text: 'Enviar ao PC Mestre' }),
+      el('p', {
+        style: 'font-size:13px;color:var(--c-texto-suave);line-height:1.55;margin-top:0',
+        text: 'O celular não grava no cadastro da Loja. A lista vai ao computador por um '
+          + 'destes caminhos, e lá é importada e publicada de volta a todos.'
+      }),
+      el('button', { class: 'btn zap largo', text: '📤 Enviar pelo WhatsApp', onclick: enviarWhatsApp }),
+      el('div', { style: 'height:8px' }),
+      el('button', { class: 'btn secundario largo', text: '💾 Salvar arquivo .presenca', onclick: baixarArquivo }),
+      el('p', {
+        class: 'legenda',
+        text: 'O arquivo é o caminho mais seguro: nada se perde se a mensagem for cortada. '
+          + 'O WhatsApp é o mais rápido quando você está no Templo.'
+      })
+    ]));
+
+    return caixa;
+  }
+
+  /* --- Solicitar inclusão --- */
+  /*
+     O aplicativo do celular nao escreve no banco da Loja: o cadastro e
+     um so, e fica no computador. O que se faz aqui e montar um pedido
+     bem formado e entregar ao WhatsApp, para que o Irmao escolha a quem
+     enviar. Quem recebe lanca no CtrLoja e republica.
+  */
+
+  const ASSUNTOS = [
+    ['obreiro', 'Inclusão de Obreiro'],
+    ['cunhada', 'Inclusão de Cunhada'],
+    ['sobrinho', 'Inclusão de Sobrinho(a)'],
+    ['data', 'Correção / inclusão de data'],
+    ['sessao', 'Agenda de sessão'],
+    ['outro', 'Outro assunto']
+  ];
+
+  function telaSolicitar(area) {
+    const caixa = el('div');
+
+    const selAssunto = el('select', { class: 'campo-largo' });
+    for (const [v, r] of ASSUNTOS) selAssunto.appendChild(el('option', { value: v, text: r }));
+
+    const solicitante = el('input', { type: 'text', class: 'campo-largo', placeholder: 'Seu nome' });
+    const refNome = el('input', { type: 'text', class: 'campo-largo', placeholder: 'Nome completo de quem o pedido trata' });
+    const refData = el('input', { type: 'date', class: 'campo-largo' });
+    const detalhe = el('textarea', { class: 'campo-largo', rows: '4', placeholder: 'Descreva o que precisa ser incluído ou corrigido' });
+
+    const rotulo = (t, campo) => el('label', { class: 'campo-mobile' }, [el('span', { text: t }), campo]);
+
+    function montarTexto() {
+      const cfg = app.banco.config.obterTodas();
+      const nomeAssunto = (ASSUNTOS.find((a) => a[0] === selAssunto.value) || [])[1] || '';
+      const linhas = [
+        '*PEDIDO — ' + area.nome.toUpperCase() + '*',
+        cfg.loja_nome || '',
+        '',
+        'Assunto: ' + nomeAssunto
+      ];
+      if (solicitante.value.trim()) linhas.push('Solicitante: ' + solicitante.value.trim());
+      if (refNome.value.trim()) linhas.push('Refere-se a: ' + refNome.value.trim());
+      if (refData.value) linhas.push('Data: ' + dataExtenso(refData.value));
+      if (detalhe.value.trim()) linhas.push('', detalhe.value.trim());
+      linhas.push('', '_Enviado pelo CtrLoja em ' + dataExtenso(hojeISO()) + '_');
+      return linhas.filter((l, i, a) => !(l === '' && a[i - 1] === '')).join('\n');
+    }
+
+    const previa = el('pre', { class: 'mensagem' });
+    const atualizarPrevia = () => { previa.textContent = montarTexto(); };
+
+    for (const c of [selAssunto, solicitante, refNome, refData, detalhe]) {
+      c.addEventListener('input', atualizarPrevia);
+      c.addEventListener('change', atualizarPrevia);
+    }
+
+    caixa.appendChild(el('div', { class: 'cartao' }, [
+      el('h2', { text: 'Solicitar inclusão' }),
+      el('p', {
+        style: 'font-size:13px;color:var(--c-texto-suave);line-height:1.55;margin-top:0',
+        text: 'O cadastro fica no computador da Loja. Preencha abaixo e envie: '
+          + 'o texto sai pronto pelo seu WhatsApp, para quem você escolher.'
+      }),
+      rotulo('Assunto', selAssunto),
+      rotulo('Seu nome', solicitante),
+      rotulo('Nome de quem o pedido trata', refNome),
+      rotulo('Data relacionada', refData),
+      rotulo('Detalhes', detalhe)
+    ]));
+
+    caixa.appendChild(el('div', { class: 'cartao' }, [
+      el('h2', { text: 'Como o pedido vai chegar' }),
+      previa,
+      el('div', { class: 'acoes' }, [
+        el('button', {
+          class: 'btn zap', text: '📤 Enviar pedido',
+          onclick: () => {
+            if (!solicitante.value.trim()) { aviso('Informe o seu nome para que saibam quem pediu.', 'erro'); return; }
+            if (!detalhe.value.trim() && !refNome.value.trim()) { aviso('Descreva o pedido.', 'erro'); return; }
+            enviarPeloWhatsApp(montarTexto());
+          }
+        }),
+        el('button', { class: 'btn secundario', text: 'Copiar', onclick: () => copiar(montarTexto()) })
+      ])
+    ]));
+
+    atualizarPrevia();
+    return caixa;
+  }
+
+  /* --- Dados --- */
+
   function telaDados() {
     const caixa = el('div');
     const r = app.banco.resumo;
@@ -478,6 +1023,22 @@
       })
     ]));
 
+    /* Trancas em uso nesta sessão */
+    const abertos = [...destravados()].filter((c) => CtrLojaCargos.obter(c).chave === c);
+    if (abertos.length) {
+      caixa.appendChild(el('div', { class: 'cartao' }, [
+        el('h2', { text: 'Cargos destravados agora' }),
+        el('p', {
+          style: 'font-size:13px;color:var(--c-texto-suave);line-height:1.5;margin-top:0',
+          text: 'O destravamento vale enquanto o aplicativo estiver aberto.'
+        }),
+        el('div', { class: 'linha-botoes' }, abertos.map((c) => el('button', {
+          class: 'btn secundario', text: '🔒 Trancar ' + CtrLojaCargos.obter(c).nome,
+          onclick: () => { trancar(c); aviso(CtrLojaCargos.obter(c).nome + ' trancada.', 'ok'); pintar(); }
+        })))
+      ]));
+    }
+
     caixa.appendChild(el('div', { class: 'cartao' }, [
       el('h2', { text: 'Versão do aplicativo' }),
       el('div', { class: 'item-lista' }, [
@@ -491,7 +1052,7 @@
           try {
             if ('serviceWorker' in navigator) {
               const regs = await navigator.serviceWorker.getRegistrations();
-              for (const r of regs) await r.unregister();
+              for (const r2 of regs) await r2.unregister();
             }
             if (window.caches) {
               const chaves = await caches.keys();
@@ -526,7 +1087,9 @@
           localStorage.removeItem(CHAVE);
           localStorage.removeItem(CHAVE_VERSAO);
           localStorage.removeItem(CHAVE_SENHA);
+          try { sessionStorage.removeItem(CHAVE_DESTRAVADOS); } catch { /* nada */ }
           app.pacote = null; app.banco = null; app.nucleo = null; app.versao = null;
+          app.area = 'inicio'; app.aba = 'hoje';
           $('#abas').hidden = true;
           $('#cargos').hidden = true;
           $('#tituloLoja').textContent = 'CtrLoja';
@@ -540,14 +1103,77 @@
     return caixa;
   }
 
-  function telaEmConstrucao(cargo) {
+  /* --- Cadeado do Cargo --- */
+
+  function telaTrancada(area) {
+    const senha = el('input', {
+      type: 'password', class: 'campo-largo',
+      placeholder: 'Senha da ' + area.nome, autocomplete: 'off'
+    });
+
+    const botao = el('button', {
+      class: 'btn largo', text: app.conferindo ? 'Conferindo…' : '🔓 Destravar',
+      disabled: app.conferindo
+    });
+
+    async function tentar() {
+      if (app.conferindo) return;
+      const valor = senha.value;
+      if (!valor) { aviso('Digite a senha do cargo.', 'erro'); return; }
+
+      app.conferindo = true;
+      botao.disabled = true;
+      botao.textContent = 'Conferindo…';
+
+      try {
+        const certa = await CtrLojaCripto.conferirSenhaCargo(envelopeSenha(area.chave), valor);
+        if (!certa) {
+          aviso('Senha incorreta para a ' + area.nome + '.', 'erro');
+          senha.value = '';
+          senha.focus();
+          return;
+        }
+        const c = destravados();
+        c.add(area.chave);
+        gravarDestravados(c);
+        app.aba = (CtrLojaCargos.abasDe(area.chave)[0] || {}).chave || 'dados';
+        aviso(area.nome + ' destravada.', 'ok');
+        pintar();
+      } catch (err) {
+        aviso(err.message || 'Não foi possível conferir a senha.', 'erro', 8000);
+      } finally {
+        app.conferindo = false;
+        botao.disabled = false;
+        botao.textContent = '🔓 Destravar';
+      }
+    }
+
+    botao.addEventListener('click', tentar);
+    senha.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); tentar(); } });
+
     return el('div', { class: 'cartao importar' }, [
-      el('div', { style: 'font-size:46px;margin-bottom:10px', text: cargo.icone }),
-      el('h2', { text: cargo.nome }),
-      el('p', { text: cargo.descricao }),
-      el('div', { class: 'aviso info', style: 'text-align:left' },
-        [document.createTextNode('Este cargo ainda não tem funções no aplicativo. '
-          + 'A estrutura já está pronta: as telas entram aqui conforme forem definidas.')])
+      el('div', { class: 'cadeado', text: '🔒' }),
+      el('h2', { text: area.nome }),
+      el('p', { text: area.descricao }),
+      senha,
+      botao,
+      el('p', {
+        style: 'font-size:12.5px;color:var(--c-texto-suave);margin:16px 0 0;line-height:1.55',
+        text: 'Cada cargo tem a sua senha, entregue ao oficial que o ocupa. '
+          + 'A agenda da Loja continua aberta a todos os Irmãos em Início.'
+      })
+    ]);
+  }
+
+  function telaEmConstrucao(area) {
+    return el('div', { class: 'cartao importar' }, [
+      el('div', { style: 'font-size:46px;margin-bottom:10px', text: area.icone }),
+      el('h2', { text: area.nome }),
+      el('p', { text: area.descricao }),
+      el('div', { class: 'aviso info', style: 'text-align:left' }, [
+        document.createTextNode('Este cargo ainda não tem telas próprias. Use o pedido abaixo '
+          + 'para solicitar informações ou providências ao oficial responsável.')
+      ])
     ]);
   }
 
@@ -559,35 +1185,54 @@
 
     if (!app.banco) { alvo.appendChild(telaImportar()); return; }
 
-    pintarCargos();
+    pintarAreas();
     pintarAbas();
 
-    const cargo = CtrLojaCargos.obter(app.cargo);
+    const area = CtrLojaCargos.obter(app.area);
 
     try {
-      if (app.aba === 'dados') alvo.appendChild(telaDados());
-      else if (!cargo.disponivel) alvo.appendChild(telaEmConstrucao(cargo));
-      else if (app.aba === 'hoje') alvo.appendChild(telaHoje());
-      else if (app.aba === 'proximos') alvo.appendChild(telaProximos());
-      else if (app.aba === 'obreiros') alvo.appendChild(telaObreiros());
-      else alvo.appendChild(telaEmConstrucao(cargo));
+      if (!liberado(area.chave)) {
+        alvo.appendChild(telaTrancada(area));
+      } else if (app.aba === 'dados') {
+        alvo.appendChild(telaDados());
+      } else if (app.aba === 'solicitar') {
+        if (!area.disponivel) alvo.appendChild(telaEmConstrucao(area));
+        alvo.appendChild(telaSolicitar(area));
+      } else if (app.aba === 'proximos') {
+        alvo.appendChild(telaProximos());
+      } else if (app.aba === 'hoje') {
+        alvo.appendChild(telaHojePublico());
+      } else if (app.aba === 'mensagens') {
+        alvo.appendChild(telaMensagens());
+      } else if (app.aba === 'presenca') {
+        alvo.appendChild(telaPresencaPublica());
+      } else if (app.aba === 'chamada') {
+        alvo.appendChild(telaChamada());
+      } else if (app.aba === 'obreiros') {
+        alvo.appendChild(telaObreiros());
+      } else {
+        alvo.appendChild(telaEmConstrucao(area));
+      }
     } catch (err) {
       alvo.appendChild(el('div', { class: 'aviso erro', text: 'Erro ao montar a tela: ' + err.message }));
     }
     window.scrollTo(0, 0);
   }
 
-  function pintarCargos() {
+  function pintarAreas() {
     const barra = $('#cargos');
     barra.innerHTML = '';
-    for (const c of CtrLojaCargos.lista) {
+    for (const a of CtrLojaCargos.lista) {
+      const trancado = !a.publico && !!envelopeSenha(a.chave) && !destravados().has(a.chave);
       barra.appendChild(el('button', {
-        class: 'cargo' + (c.chave === app.cargo ? ' ativo' : '') + (c.disponivel ? '' : ' indisponivel'),
-        text: `${c.icone} ${c.nome}`,
+        class: 'cargo' + (a.chave === app.area ? ' ativo' : '')
+          + (a.publico ? ' publico' : '')
+          + (a.disponivel ? '' : ' indisponivel'),
+        text: `${a.icone} ${a.nome}${trancado ? ' 🔒' : ''}`,
         onclick: () => {
-          app.cargo = c.chave;
-          const abas = CtrLojaCargos.abasDe(c.chave);
-          app.aba = abas[0].chave;
+          app.area = a.chave;
+          const abas = CtrLojaCargos.abasDe(a.chave);
+          app.aba = (abas[0] || {}).chave || 'dados';
           pintar();
         }
       }));
@@ -596,8 +1241,14 @@
 
   function pintarAbas() {
     const barra = $('#abas');
+    const area = CtrLojaCargos.obter(app.area);
+    const abas = liberado(area.chave) ? CtrLojaCargos.abasDe(app.area) : [];
+
     barra.innerHTML = '';
-    for (const a of CtrLojaCargos.abasDe(app.cargo)) {
+    barra.hidden = abas.length < 2;
+    if (abas.length < 2) return;
+
+    for (const a of abas) {
       barra.appendChild(el('button', {
         class: 'aba' + (a.chave === app.aba ? ' ativa' : ''),
         text: a.nome,

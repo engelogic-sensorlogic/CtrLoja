@@ -26,9 +26,13 @@ const readline = require('readline');
 const RAIZ = path.join(__dirname, '..');
 const cripto = require(path.join(RAIZ, 'src', 'main', 'services', 'cripto.js'));
 
-const DESTINO = path.join(RAIZ, 'mobile', 'dados');
+const DESTINO_PADRAO = path.join(RAIZ, 'mobile', 'dados');
 const ARQ_DADOS = 'agenda.enc';
 const ARQ_VERSAO = 'versao.json';
+
+// Onde gravar. So muda com --destino, usado pelos testes automatizados
+// para nao encostarem no pacote de verdade que voce publicou.
+let DESTINO = DESTINO_PADRAO;
 
 /* ------------------------------------------------------------------ */
 /* O que o celular precisa - e apenas isso                             */
@@ -38,7 +42,7 @@ const ARQ_VERSAO = 'versao.json';
 // Chancelaria esta implementada; Secretaria, Tesouraria e Hospitalaria
 // entram aqui conforme forem construidas.
 const CARGOS = {
-  chancelaria: ['obreiros', 'familiares', 'datas_calendario', 'sessoes', 'templates']
+  chancelaria: ['obreiros', 'familiares', 'datas_calendario', 'sessoes', 'templates', 'presencas']
 };
 
 // Historico de envios e grupos do WhatsApp ficam no computador: o celular
@@ -52,6 +56,26 @@ const CONFIG_PUBLICADA = [
   'titulo_obreiro', 'titulo_cunhada', 'titulo_sobrinho', 'titulo_sobrinha',
   'agrupar_mensagens', 'eventos_habilitados'
 ];
+
+// As senhas dos Cargos tambem vao - mas apenas como IMPRESSAO DIGITAL.
+// A verificacao logo abaixo recusa publicar qualquer coisa que nao esteja
+// nesse formato, para que um dia ninguem publique senha em texto por engano.
+const PREFIXO_SENHA_CARGO = 'senha_cargo_';
+
+function conferirSenhasCargo(linhas) {
+  for (const l of linhas) {
+    if (!String(l.chave || '').startsWith(PREFIXO_SENHA_CARGO)) continue;
+    if (!l.valor) continue;
+    let env = null;
+    try { env = JSON.parse(l.valor); } catch { env = null; }
+    if (!env || env.formato !== cripto.FORMATO_SENHA || !env.hash || !env.sal) {
+      throw new Error(
+        `A configuração "${l.chave}" não está no formato de impressão digital. `
+        + 'Nada foi publicado. Redefina a senha desse Cargo em Configurações.'
+      );
+    }
+  }
+}
 
 /* ------------------------------------------------------------------ */
 
@@ -102,7 +126,10 @@ function filtrar(pacote, cargos) {
   for (const [tabela, linhas] of Object.entries(pacote.dados || {})) {
     if (TABELAS_FORA.includes(tabela)) continue;
     if (tabela === 'config') {
-      dados.config = (linhas || []).filter((l) => CONFIG_PUBLICADA.includes(l.chave));
+      dados.config = (linhas || []).filter((l) =>
+        CONFIG_PUBLICADA.includes(l.chave)
+        || (String(l.chave || '').startsWith(PREFIXO_SENHA_CARGO) && l.valor));
+      conferirSenhasCargo(dados.config);
       continue;
     }
     if (!permitidas.has(tabela)) continue;
@@ -154,7 +181,12 @@ async function principal() {
   const args = process.argv.slice(2);
   const iSenha = args.indexOf('--senha');
   let senha = iSenha >= 0 ? args[iSenha + 1] : (process.env.CTRLOJA_SENHA || null);
-  const origemArg = args.find((a) => !a.startsWith('--') && a !== senha);
+
+  const iDestino = args.indexOf('--destino');
+  const destinoArg = iDestino >= 0 ? args[iDestino + 1] : null;
+  if (destinoArg) DESTINO = path.resolve(destinoArg);
+
+  const origemArg = args.find((a) => !a.startsWith('--') && a !== senha && a !== destinoArg);
 
   const origem = localizarBanco(origemArg);
   console.log(`Origem : ${origem}`);
@@ -168,6 +200,15 @@ async function principal() {
   }
   const fora = Object.keys(bruto.dados || {}).filter((t) => !(t in pacote.dados));
   if (fora.length) console.log(`\nFica no computador: ${fora.join(', ')}`);
+
+  const protegidos = (pacote.dados.config || [])
+    .filter((l) => String(l.chave || '').startsWith(PREFIXO_SENHA_CARGO) && l.valor)
+    .map((l) => l.chave.slice(PREFIXO_SENHA_CARGO.length));
+  console.log('\nCargos com senha definida: ' + (protegidos.length ? protegidos.join(', ') : 'nenhum'));
+  if (!protegidos.length) {
+    console.log('  [AVISO] Sem senha, os Cargos ficam abertos no celular de qualquer Irmao.');
+    console.log('          Defina em Configuracoes -> Senhas dos Cargos.');
+  }
 
   if (!senha) {
     console.log('\nA senha protege os dados dos Irmãos e das famílias no repositório público.');
@@ -207,7 +248,7 @@ async function principal() {
   const vazou = nomes.find((n) => textoEnvelope.indexOf(n) >= 0);
   if (vazou) throw new Error(`Falha de segurança: "${vazou}" aparece em claro no arquivo.`);
 
-  console.log(`\nPublicado em mobile/dados/`);
+  console.log(`\nPublicado em ${path.relative(RAIZ, DESTINO) || DESTINO}/`);
   console.log(`  ${ARQ_DADOS}    ${(info.bytes / 1024).toFixed(1)} KB  (cifrado)`);
   console.log(`  ${ARQ_VERSAO}   versão ${versao}`);
   console.log(`\nConferido: o arquivo abre com a senha e nenhum nome ficou em claro.`);

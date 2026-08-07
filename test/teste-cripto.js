@@ -158,6 +158,47 @@ const criptoMobile = self.CtrLojaCripto;
   ok('senha curta é sinalizada como fraca', criptoDesktop.senhaFraca('booz') === true);
   ok('senha longa não é sinalizada', criptoDesktop.senhaFraca('booz-ufr-141-rolandia') === false);
 
+  /* ---------------- senhas dos Cargos ---------------- */
+
+  console.log('\n== Senha de Cargo: o computador define, o celular confere ==');
+
+  const envCargo = criptoDesktop.hashSenhaCargo('  Chanceler-UFR-141  ');
+  const textoCargo = JSON.stringify(envCargo);
+
+  ok('formato declarado', envCargo.formato === 'ctrloja-senha-cargo' && envCargo.versao === 1);
+  ok('mesmo algoritmo do pacote',
+    envCargo.algoritmo === 'PBKDF2-SHA256' && envCargo.iteracoes >= 310000);
+  ok('a senha NAO aparece na impressão digital',
+    !/chanceler/i.test(textoCargo) && !/141/.test(textoCargo.replace(/"iteracoes":\d+/, '')));
+  ok('sal diferente a cada definição',
+    criptoDesktop.hashSenhaCargo('mesma-senha').sal !== criptoDesktop.hashSenhaCargo('mesma-senha').sal);
+
+  ok('desktop aceita a senha certa', criptoDesktop.conferirSenhaCargo(envCargo, 'chanceler-ufr-141') === true);
+  ok('desktop recusa a senha errada', criptoDesktop.conferirSenhaCargo(envCargo, 'chanceler-ufr-142') === false);
+  ok('desktop recusa senha vazia', criptoDesktop.conferirSenhaCargo(envCargo, '') === false);
+  ok('desktop recusa envelope estranho',
+    criptoDesktop.conferirSenhaCargo({ formato: 'outra-coisa' }, 'chanceler-ufr-141') === false);
+
+  for (const variante of ['chanceler-ufr-141', 'CHANCELER-UFR-141', '  Chanceler-UFR-141 ']) {
+    ok(`celular aceita "${variante.trim()}"`, await criptoMobile.conferirSenhaCargo(envCargo, variante) === true);
+  }
+  ok('celular recusa a senha errada', await criptoMobile.conferirSenhaCargo(envCargo, 'outra-senha') === false);
+  ok('celular recusa senha vazia', await criptoMobile.conferirSenhaCargo(envCargo, '') === false);
+  ok('celular recusa envelope nulo', await criptoMobile.conferirSenhaCargo(null, 'x') === false);
+
+  // Um Cargo nao pode ser aberto com a senha de outro
+  const envOutro = criptoDesktop.hashSenhaCargo('tesouraria-141');
+  ok('senha de um Cargo não abre outro',
+    await criptoMobile.conferirSenhaCargo(envOutro, 'chanceler-ufr-141') === false);
+
+  // A senha da Loja tambem nao serve de atalho
+  ok('senha da Loja não abre o Cargo',
+    await criptoMobile.conferirSenhaCargo(envCargo, SENHA) === false);
+
+  const tCargo = Date.now();
+  await criptoMobile.conferirSenhaCargo(envCargo, 'tentativa-errada');
+  ok('conferência em tempo aceitável no celular', Date.now() - tCargo < 3000, (Date.now() - tCargo) + ' ms');
+
   /* ---------------- impressão digital ---------------- */
 
   console.log('\n== Impressão digital (detecta novidade) ==');

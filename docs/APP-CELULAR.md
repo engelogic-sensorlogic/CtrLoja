@@ -121,11 +121,103 @@ Três pontos:
 
 ---
 
-## Cargos
+## Como o aplicativo se divide
 
-A navegação se organiza por cargo: **Chancelaria**, **Secretaria**, **Tesouraria** e
-**Hospitalaria**. Hoje só a Chancelaria tem funções — agenda, efemérides e mensagens. As outras
-já aparecem na barra e serão preenchidas conforme forem definidas.
+O aplicativo é entregue a **todos os Irmãos** da Loja, e por isso tem dois níveis.
+
+### Início — aberto, somente leitura
+
+Todo Irmão que sincronizou vê:
+
+- os **eventos do dia** e a **Agenda do Dia** da sessão, quando houver;
+- os **próximos 30 dias**, em lista, tocando para abrir a data.
+
+Aqui não há texto de mensagem pronto nem botão de envio, e a relação de Obreiros com datas de
+nascimento e nomes de família **não aparece**. É uma tela de consulta.
+
+### Cargos — protegidos por senha
+
+**Chancelaria**, **Secretaria**, **Tesouraria** e **Hospitalaria**. Dentro do Cargo é que ficam
+as funções de trabalho: **disparar as mensagens** pelo WhatsApp, consultar a **relação de
+Obreiros** e **solicitar inclusão** de informações.
+
+Hoje só a Chancelaria tem telas próprias. As outras já aparecem na barra e oferecem o pedido de
+inclusão; as demais funções entram conforme forem definidas.
+
+---
+
+## Senhas dos Cargos
+
+A **senha da Loja** abre a agenda sincronizada — todos os Irmãos a possuem. Ela não serve,
+portanto, para separar o que é de cada Cargo. Cada Cargo tem **a sua senha**, entregue apenas ao
+oficial que o ocupa.
+
+**Para definir**, no CtrLoja do computador: **Configurações → Senhas dos Cargos**. Depois rode o
+`publicar-dados.bat` para que os celulares recebam.
+
+O que viaja no pacote **não é a senha**, e sim a sua **impressão digital** (PBKDF2-SHA256 com sal
+próprio). Nem o programa consegue mostrar de volta uma senha já definida — só trocar ou remover.
+Assim, um Irmão que abriu o pacote com a senha da Loja continua sem conseguir ler a senha de um
+Cargo que não é o dele.
+
+O destravamento vale **enquanto o aplicativo estiver aberto**. Fechou, tranca de novo. Na aba
+**Dados** há o botão para trancar antes disso.
+
+Vale ser franco sobre o alcance: depois de sincronizados, os dados já estão no aparelho. A senha
+do Cargo é a **tranca da porta**, não um cofre — ela impede que quem pegue o celular use as
+funções do Cargo, que é o problema real. Cargo sem senha definida fica aberto a qualquer Irmão.
+
+---
+
+## Lista de Presença
+
+**Fazer a chamada** — Chancelaria → aba **Presença**. Escolha a sessão, informe quem está fazendo
+a chamada e toque no nome de cada Irmão presente. O contador acompanha ao vivo. Irmão
+**Adormecido não aparece** na chamada, do mesmo modo que não recebe mensagem.
+
+**Mandar ao PC Mestre** — o celular não grava no cadastro da Loja, então a lista volta por um
+destes caminhos:
+
+| Caminho | Quando usar |
+|---------|-------------|
+| **📤 WhatsApp** | No Templo, na hora. Mais rápido. |
+| **💾 Arquivo `.presenca`** | Mais seguro: nada se perde se a mensagem for cortada. |
+
+**Importar no computador** — tela **Presença** → **📥 Importar do celular**. Abre o arquivo ou
+aceita o texto colado do WhatsApp. Antes de gravar, o CtrLoja mostra nome por nome o que vai
+mudar. Nada entra no cadastro sem o seu aceite.
+
+A mensagem do WhatsApp leva um código com uma **conferência**: se o texto chegar cortado ou
+alterado, o computador recusa e pede o reenvio, em vez de gravar uma lista errada. O código não
+contém nome nenhum — só números de cadastro e presente/ausente.
+
+**Relatório** — na tela **Início**, aberta a todos os Irmãos: comparecimento sessão a sessão em
+gráfico e a frequência de cada um. No computador, a mesma coisa com mais detalhe, e o
+**PDF para arquivo físico** com o logo da Loja, data, grau, tipo de sessão e espaço para rubrica.
+
+Uma regra atravessa tudo: **sessão sem chamada não é sessão com zero presentes**. Sessões que
+ninguém chamou ficam fora das estatísticas, para não derrubar a média da Loja.
+
+---
+
+## Solicitar inclusão
+
+O cadastro da Loja é um só e fica no computador; o celular não escreve nele. Dentro de qualquer
+Cargo, a aba **Solicitar** monta um pedido bem formado — assunto, solicitante, a quem se refere,
+data e detalhes — e entrega ao WhatsApp para você escolher o destinatário. Quem recebe lança no
+CtrLoja e republica.
+
+---
+
+## Testar no computador antes de publicar
+
+```bat
+testar-celular.bat
+```
+
+Abre o aplicativo do celular em `http://localhost:8123/mobile/`. Por ser **localhost**, o
+navegador libera a criptografia e tudo funciona igual ao endereço publicado — inclusive o
+Sincronizar e as senhas dos Cargos. Abrir o `index.html` com duplo clique **não** funciona.
 
 ---
 

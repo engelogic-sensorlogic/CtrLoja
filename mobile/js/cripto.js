@@ -108,5 +108,46 @@
       .join('');
   }
 
-  raiz.CtrLojaCripto = { decifrar, impressao, disponivel, normalizarSenha, FORMATO, VERSAO };
+  /* ---------------- senhas dos Cargos ---------------- */
+  /*
+     A senha da Loja abre o pacote e todos os Irmaos a tem. Cada Cargo
+     tem a sua, e o que viaja no pacote e apenas a impressao digital
+     (PBKDF2-SHA256 com sal proprio) - nunca a senha. A conta feita aqui
+     e a MESMA de src/main/services/cripto.js; test/teste-cripto.js prova
+     que as duas concordam.
+  */
+  const FORMATO_SENHA = 'ctrloja-senha-cargo';
+
+  async function derivarBits(senha, sal, iteracoes) {
+    const base = await raiz.crypto.subtle.importKey(
+      'raw', new TextEncoder().encode(senha), 'PBKDF2', false, ['deriveBits']
+    );
+    return raiz.crypto.subtle.deriveBits(
+      { name: 'PBKDF2', salt: sal, iterations: iteracoes, hash: 'SHA-256' }, base, 256
+    );
+  }
+
+  /** Confere a senha digitada contra a impressao publicada pelo computador. */
+  async function conferirSenhaCargo(envelope, senha) {
+    exigirContextoSeguro();
+    if (!envelope || envelope.formato !== FORMATO_SENHA) return false;
+
+    let limpa;
+    try { limpa = normalizarSenha(senha); } catch { return false; }
+
+    const sal = paraBytes(envelope.sal);
+    const esperado = paraBytes(envelope.hash);
+    const bits = new Uint8Array(await derivarBits(limpa, sal, envelope.iteracoes || 310000));
+
+    if (bits.length !== esperado.length) return false;
+    // Percorre tudo sempre, sem sair no primeiro byte diferente.
+    let diferenca = 0;
+    for (let i = 0; i < bits.length; i++) diferenca |= bits[i] ^ esperado[i];
+    return diferenca === 0;
+  }
+
+  raiz.CtrLojaCripto = {
+    decifrar, impressao, disponivel, normalizarSenha,
+    conferirSenhaCargo, FORMATO, FORMATO_SENHA, VERSAO
+  };
 }(typeof self !== 'undefined' ? self : this));

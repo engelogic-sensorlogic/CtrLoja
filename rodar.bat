@@ -83,7 +83,11 @@ if not defined NODEDIR (
   if not errorlevel 1 (
     echo   Este computador possui o winget: posso instalar automaticamente.
     echo.
-    set /p "RESP=   Instalar o Node.js LTS agora? [S/N] "
+    REM  Com chcp 65001 o cmd.exe nao mostra o texto do SET /P: a pergunta
+    REM  vai antes, num ECHO, senao a tela parece travada.
+    echo   Instalar o Node.js LTS agora? [S/N]
+    set "RESP="
+    set /p "RESP=   Sua resposta: "
     if /i "!RESP!"=="S" goto :INSTALARNODE
   )
   goto :FALHA
@@ -236,6 +240,12 @@ if errorlevel 1 goto :FALHA
 call node --no-warnings test\teste-cripto.js
 if errorlevel 1 goto :FALHA
 call node --no-warnings test\teste-sincronizacao.js
+if errorlevel 1 goto :FALHA
+call node --no-warnings test\teste-presenca.js
+if errorlevel 1 goto :FALHA
+REM  Telas do celular: so roda se o jsdom estiver instalado; senao ele
+REM  mesmo avisa e passa adiante, sem reprovar nada.
+call node --no-warnings test\teste-telas-celular.js
 if errorlevel 1 goto :FALHA
 echo.
 echo [3/3] Todos os testes passaram.

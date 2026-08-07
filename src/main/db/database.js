@@ -479,6 +479,97 @@ const sessoes = {
 };
 
 /* ------------------------------------------------------------------ */
+/* Lista de presenca                                                   */
+/* ------------------------------------------------------------------ */
+/*
+ * Uma linha por Obreiro por sessao. Nao havendo NENHUMA linha para uma
+ * data, a chamada daquela sessao ainda nao foi feita - o que e bem
+ * diferente de "ninguem compareceu". As estatisticas so consideram as
+ * sessoes que tiveram chamada.
+ */
+
+const presencas = {
+  /** Todas as linhas, para publicar ao celular e para as estatisticas. */
+  todas() {
+    return getConn().prepare('SELECT * FROM presencas ORDER BY sessao_data, obreiro_id').all();
+  },
+
+  porSessao(data) {
+    return getConn().prepare('SELECT * FROM presencas WHERE sessao_data = ? ORDER BY obreiro_id').all(data);
+  },
+
+  porObreiro(obreiroId) {
+    return getConn().prepare('SELECT * FROM presencas WHERE obreiro_id = ? ORDER BY sessao_data').all(obreiroId);
+  },
+
+  /** Datas de sessao que ja tiveram chamada registrada. */
+  datasComChamada() {
+    return getConn().prepare('SELECT DISTINCT sessao_data FROM presencas ORDER BY sessao_data').all()
+      .map((l) => l.sessao_data);
+  },
+
+  temChamada(data) {
+    return !!getConn().prepare('SELECT 1 FROM presencas WHERE sessao_data = ? LIMIT 1').get(data);
+  },
+
+  /**
+   * Grava a chamada inteira de uma sessao, de uma vez.
+   * Reenviar a mesma lista nao duplica: a chave unica atualiza a linha.
+   *
+   * @param {object} reg { sessao_data, itens:[{obreiro_id, presente}], origem, registrado_por }
+   * @returns {object} quantos ficaram presentes e ausentes
+   */
+  registrarLista(reg) {
+    if (!reg || !reg.sessao_data) throw new Error('Informe a data da sessão.');
+    const itens = Array.isArray(reg.itens) ? reg.itens : [];
+    if (!itens.length) throw new Error('A lista de presença está vazia.');
+
+    const validos = new Set(
+      getConn().prepare('SELECT id FROM obreiros').all().map((o) => o.id)
+    );
+
+    const gravar = getConn().prepare(`
+      INSERT INTO presencas (sessao_data, obreiro_id, presente, origem, registrado_por)
+      VALUES (@sessao_data, @obreiro_id, @presente, @origem, @registrado_por)
+      ON CONFLICT(sessao_data, obreiro_id) DO UPDATE SET
+        presente = excluded.presente,
+        origem = excluded.origem,
+        registrado_por = excluded.registrado_por,
+        registrado_em = datetime('now','localtime')
+    `);
+
+    let presentes = 0;
+    let ausentes = 0;
+    let ignorados = 0;
+
+    const tx = getConn().transaction(() => {
+      for (const i of itens) {
+        const id = Number(i.obreiro_id);
+        // Obreiro que nao existe mais neste banco: ignora em vez de quebrar
+        if (!validos.has(id)) { ignorados++; continue; }
+        const presente = i.presente ? 1 : 0;
+        gravar.run({
+          sessao_data: reg.sessao_data,
+          obreiro_id: id,
+          presente,
+          origem: reg.origem || 'pc',
+          registrado_por: reg.registrado_por || null
+        });
+        if (presente) presentes++; else ausentes++;
+      }
+    });
+    tx();
+
+    return { sessao_data: reg.sessao_data, presentes, ausentes, ignorados };
+  },
+
+  limparSessao(data) {
+    getConn().prepare('DELETE FROM presencas WHERE sessao_data = ?').run(data);
+    return true;
+  }
+};
+
+/* ------------------------------------------------------------------ */
 /* Grupos do WhatsApp                                                  */
 /* ------------------------------------------------------------------ */
 
@@ -560,6 +651,6 @@ const envios = {
 
 module.exports = {
   init, getConn, getPath,
-  config, obreiros, familiares, datas, templates, sessoes, grupos, envios,
+  config, obreiros, familiares, datas, templates, sessoes, presencas, grupos, envios,
   CONFIG_PADRAO, GRAUS_SESSAO, TIPOS_SESSAO
 };
