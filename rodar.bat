@@ -18,11 +18,17 @@ REM                              o mesmo, tentando ainda compilar o
 REM                              better-sqlite3 (banco um pouco mais rapido).
 REM
 REM    rodar.bat local        -> COPIA o projeto para uma pasta local do
-REM                              usuario e roda de la. Use quando o projeto
-REM                              estiver em unidade de rede/mapeada e o
-REM                              Electron reclamar do processo de GPU.
+REM                              usuario e roda de la.
+REM
+REM    rodar.bat rede         -> forca a execucao a partir da pasta atual,
+REM                              mesmo fora do disco C:. Use so para teste:
+REM                              o Electron costuma nao abrir assim.
 REM
 REM    rodar.bat testes       -> roda apenas os testes automatizados
+REM
+REM  IMPORTANTE: estando o projeto fora do disco C: (Z:, unidade de rede),
+REM  a copia local e usada AUTOMATICAMENTE - o Electron nao consegue criar
+REM  a janela de la. Os dados nao mudam de lugar: %APPDATA%\CtrLoja.
 REM ===================================================================
 
 cd /d "%~dp0"
@@ -115,6 +121,34 @@ if !NODEMAJOR! LSS 18 (
 if /i "%MODO%"=="testes" goto :TESTES
 if /i "%MODO%"=="local" set "LOCALMODO=interface" & goto :COPIALOCAL
 if /i "%MODO%"=="local-completo" set "LOCALMODO=completo" & goto :COPIALOCAL
+if /i "%MODO%"=="rede" set "MODO=interface" & goto :DEPENDENCIAS
+
+REM ------------------------------------------------------------------
+REM  Projeto fora do disco C:? Roda da copia local, sempre.
+REM
+REM  O Chromium que vem dentro do Electron NAO consegue criar a janela
+REM  a partir de unidade mapeada ou de rede neste computador: o processo
+REM  morre antes de desenhar, sem mensagem nenhuma. Ja tentamos desligar
+REM  a aceleracao grafica e os contornos so mudaram o sintoma - janela
+REM  vazia, ou janela que nao aparece.
+REM
+REM  Entao a copia local deixou de ser contorno e virou o padrao. O
+REM  codigo-fonte continua aqui, no Z:, e SEUS DADOS tambem nao mudam
+REM  de lugar - ficam sempre em %APPDATA%\CtrLoja.
+REM
+REM  Para forcar a execucao daqui mesmo:  rodar.bat rede
+REM ------------------------------------------------------------------
+if /i not "%~d0"=="C:" (
+  echo.
+  echo       O projeto esta na unidade %~d0 e o aplicativo sera executado
+  echo       a partir de uma copia no disco local ^(mais rapido e estavel^).
+  echo       Seus dados continuam em %%APPDATA%%\CtrLoja.
+  echo.
+  set "LOCALMODO=%MODO%"
+  goto :COPIALOCAL
+)
+
+:DEPENDENCIAS
 
 REM ------------------------------------------------------------------
 REM  Dependencias
@@ -189,6 +223,19 @@ echo [2/3] Sincronizando o projeto com a pasta local...
 echo       Origem : %~dp0
 echo       Destino: %DESTINO%
 
+REM  ------------------------------------------------------------------
+REM  Diz ao aplicativo onde fica o PROJETO DE VERDADE.
+REM
+REM  A copia local e descartavel e nao tem o .git - ela existe so para o
+REM  Electron conseguir abrir a janela. Publicar dentro dela seria jogar
+REM  o pacote fora: na proxima abertura o robocopy apagaria tudo, e o
+REM  publicar-github.bat nem repositorio encontraria.
+REM
+REM  Com esta variavel, o botao "Publicar para o celular" grava na pasta
+REM  original e o envio ao GitHub acontece onde o repositorio esta.
+REM  ------------------------------------------------------------------
+set "CTRLOJA_PROJETO=%~dp0"
+
 REM  Copia apenas os arquivos alterados - rapido a partir da segunda vez
 robocopy "%~dp0." "%DESTINO%" /MIR /NFL /NDL /NJH /NJS /NP /R:1 /W:1 ^
   /XD node_modules dist .git installer\Output ^
@@ -242,6 +289,8 @@ if errorlevel 1 goto :FALHA
 call node --no-warnings test\teste-sincronizacao.js
 if errorlevel 1 goto :FALHA
 call node --no-warnings test\teste-presenca.js
+if errorlevel 1 goto :FALHA
+call node --no-warnings test\teste-publicacao.js
 if errorlevel 1 goto :FALHA
 REM  Telas do celular: so roda se o jsdom estiver instalado; senao ele
 REM  mesmo avisa e passa adiante, sem reprovar nada.

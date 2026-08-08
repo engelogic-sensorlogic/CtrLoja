@@ -61,6 +61,12 @@ contextBridge.exposeInMainWorld('api', {
     salvar: (mapa) => call('config:salvar', mapa)
   },
 
+  publicacao: {
+    estado: () => call('publicacao:estado'),
+    publicar: (senha) => call('publicacao:publicar', senha),
+    abrirGithub: () => call('publicacao:abrir-github')
+  },
+
   cargos: {
     estado: () => call('cargos:estado'),
     definirSenha: (cargo, senha) => call('cargos:definir-senha', cargo, senha)

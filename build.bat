@@ -160,6 +160,12 @@ if errorlevel 1 (
   echo        Rode "rodar.bat testes" para ver os detalhes.
   goto :FALHA
 )
+call node --no-warnings test\teste-publicacao.js >nul 2>&1
+if errorlevel 1 (
+  echo [ERRO] Testes da publicacao falharam. Build interrompido.
+  echo        Rode "rodar.bat testes" para ver os detalhes.
+  goto :FALHA
+)
 echo       OK: todos os testes passaram.
 
 REM ------------------------------------------------------------------

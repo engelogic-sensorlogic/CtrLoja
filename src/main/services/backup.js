@@ -16,12 +16,19 @@ const TABELAS = ['obreiros', 'familiares', 'datas_calendario', 'templates', 'ses
 const FORMATO = 'ctrloja-backup';
 const VERSAO = 1;
 
-function exportar(destino) {
+/**
+ * Monta o pacote com todas as tabelas, sem gravar nada.
+ *
+ * Existe separado do exportar() para que a publicacao ao celular possa
+ * ser feita direto da memoria - sem passar por um arquivo em claro no
+ * disco s'o para depois cifra-lo.
+ */
+function montar() {
   const conn = db.getConn();
   const dados = {};
   for (const t of TABELAS) dados[t] = conn.prepare(`SELECT * FROM ${t}`).all();
 
-  const pacote = {
+  return {
     formato: FORMATO,
     versao: VERSAO,
     gerado_em: new Date().toISOString(),
@@ -29,6 +36,10 @@ function exportar(destino) {
     resumo: Object.fromEntries(TABELAS.map((t) => [t, dados[t].length])),
     dados
   };
+}
+
+function exportar(destino) {
+  const pacote = montar();
 
   fs.mkdirSync(path.dirname(destino), { recursive: true });
   fs.writeFileSync(destino, JSON.stringify(pacote, null, 2), 'utf8');
@@ -90,4 +101,4 @@ function importar(origem, modo = 'substituir') {
   return { arquivo: origem, modo, resumo, gerado_em: pacote.gerado_em };
 }
 
-module.exports = { exportar, importar, TABELAS };
+module.exports = { montar, exportar, importar, TABELAS };

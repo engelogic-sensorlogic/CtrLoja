@@ -48,14 +48,15 @@ if (process.platform === 'win32' &&
   app.commandLine.appendSwitch('no-sandbox');
   app.commandLine.appendSwitch('disable-gpu');
   app.commandLine.appendSwitch('disable-gpu-sandbox');
-  app.commandLine.appendSwitch('disable-gpu-compositing');
 
-  // ATENCAO: NAO acrescentar --disable-software-rasterizer aqui.
+  // ATENCAO: NAO acrescentar --disable-software-rasterizer nem
+  // --disable-gpu-compositing aqui.
   //
-  // Com a GPU ja desligada logo acima, esse switch tira TAMBEM o
-  // desenho por software (SwiftShader) - e ai nao sobra quem desenhe.
-  // O resultado e a janela abrir com a cor de fundo e nada dentro,
-  // sem erro nenhum no console. Foi exatamente o que aconteceu.
+  // Com a GPU ja desligada logo acima, o primeiro tira TAMBEM o desenho
+  // por software (SwiftShader) e o segundo tira a composicao da tela.
+  // Sem ninguem para desenhar, o Chromium nunca entrega o primeiro
+  // quadro - e a janela ou abre vazia, ou nao chega a aparecer, sempre
+  // sem erro nenhum no console. Os dois casos ja aconteceram aqui.
   console.log('[ctrloja] Modo compatibilidade gráfica ativado (unidade de rede/mapeada).');
 }
 
@@ -87,17 +88,59 @@ function createWindow() {
 
   Menu.setApplicationMenu(null);
   mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
-  mainWindow.once('ready-to-show', () => {
+
+  /*
+   * A janela nasce escondida e aparece no 'ready-to-show', que so
+   * dispara quando o Chromium entrega o PRIMEIRO QUADRO desenhado.
+   *
+   * Em maquina sem aceleracao grafica - que e o nosso caso ao rodar de
+   * unidade mapeada - esse primeiro quadro as vezes demora demais ou
+   * nao chega nunca. A janela entao fica invisivel para sempre, sem
+   * erro nenhum no console: o aplicativo parece simplesmente nao abrir.
+   *
+   * Por isso a exibicao tem uma rede de seguranca: passados 5 segundos,
+   * a janela aparece de qualquer maneira. Melhor uma janela que pinta
+   * com meio segundo de atraso do que um aplicativo que nunca abre.
+   */
+  let jaMostrada = false;
+  const mostrar = (motivo) => {
+    if (jaMostrada || !mainWindow || mainWindow.isDestroyed()) return;
+    jaMostrada = true;
+    clearTimeout(redeDeSeguranca);
+    if (motivo) console.log(`[ctrloja] Janela exibida (${motivo}).`);
     if (iniciarMinimizado) {
       mainWindow.minimize();
       mainWindow.showInactive();
     } else {
       mainWindow.show();
     }
+  };
+
+  const redeDeSeguranca = setTimeout(
+    () => mostrar('tempo esgotado — sem aceleração gráfica'),
+    5000
+  );
+
+  mainWindow.once('ready-to-show', () => mostrar(null));
+
+  /* Falhas que antes passavam caladas */
+  mainWindow.webContents.on('did-fail-load', (_e, codigo, descricao, url) => {
+    console.error(`[ctrloja] Falha ao carregar a interface (${codigo}): ${descricao} — ${url}`);
+    mostrar('após falha de carregamento');
   });
+  mainWindow.webContents.on('render-process-gone', (_e, detalhe) => {
+    console.error('[ctrloja] O processo da interface terminou:', detalhe.reason);
+  });
+  mainWindow.webContents.on('preload-error', (_e, arquivo, erro) => {
+    console.error('[ctrloja] Erro no preload:', arquivo, erro.message);
+  });
+
   if (isDev) mainWindow.webContents.openDevTools({ mode: 'detach' });
 
-  mainWindow.on('closed', () => { mainWindow = null; });
+  mainWindow.on('closed', () => {
+    clearTimeout(redeDeSeguranca);
+    mainWindow = null;
+  });
 }
 
 function send(channel, payload) {
@@ -156,12 +199,17 @@ app.whenReady().then(() => {
     onLog: (msg) => send('app:log', msg)
   });
 
+  console.log('[ctrloja] Abrindo a janela principal…');
   createWindow();
   autoConectarWhatsApp(sessionPath);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+}).catch((err) => {
+  // Sem este catch, uma falha no arranque encerrava o aplicativo em
+  // silencio: nenhuma janela, nenhuma mensagem, nada para investigar.
+  console.error('\n[ctrloja] FALHA AO INICIAR:', err && err.stack ? err.stack : err, '\n');
 });
 
 app.on('window-all-closed', () => {
@@ -377,6 +425,117 @@ handle('presenca:exportar-pdf', async (data) => {
     { logo1: acharLogo('Logo1'), logo2: acharLogo('Logo2') }
   );
   return Object.assign({ cancelado: false }, r);
+});
+
+/* ------------------------------------------------------------------ */
+/* IPC - Publicar para o celular                                       */
+/* ------------------------------------------------------------------ */
+/*
+ * O mesmo trabalho do publicar-dados.bat, feito de dentro do programa
+ * para que ninguem precise abrir pasta nem linha de comando.
+ *
+ * Roda no processo principal, sem abrir outro processo: e a MESMA
+ * funcao que o .bat chama, entao os dois caminhos nao podem divergir.
+ */
+
+const publicador = require(path.join(__dirname, '..', '..', 'ferramentas', 'publicar-dados.js'));
+
+/**
+ * Pasta do PROJETO - que nem sempre e a pasta de onde o aplicativo roda.
+ *
+ * Estando o projeto em unidade mapeada, o rodar.bat executa a partir de
+ * uma copia local descartavel, sem o .git. Publicar ali seria perder o
+ * trabalho: a copia e refeita a cada abertura. O rodar.bat entao informa
+ * o caminho original em CTRLOJA_PROJETO, e e ele que vale aqui.
+ */
+function pastaProjeto() {
+  const informada = process.env.CTRLOJA_PROJETO;
+  if (informada) {
+    const limpa = informada.replace(/[\\/]+$/, '');
+    // So aceita se for mesmo um projeto CtrLoja - variavel velha no
+    // ambiente nao pode mandar o pacote para um lugar qualquer.
+    if (fs.existsSync(path.join(limpa, 'package.json')) && fs.existsSync(path.join(limpa, 'mobile'))) {
+      return limpa;
+    }
+    console.warn(`[ctrloja] CTRLOJA_PROJETO ignorado (não parece um projeto CtrLoja): ${informada}`);
+  }
+  return resolveAppRoot();
+}
+
+/** Onde gravar: a pasta mobile/dados do projeto. */
+function pastaPublicacao() {
+  return path.join(pastaProjeto(), 'mobile', 'dados');
+}
+
+handle('publicacao:estado', () => {
+  const pasta = pastaPublicacao();
+  const arq = path.join(pasta, 'versao.json');
+  let info = null;
+  try {
+    if (fs.existsSync(arq)) info = JSON.parse(fs.readFileSync(arq, 'utf8'));
+  } catch { info = null; }
+
+  const pacote = backup.montar();
+  const protegidos = publicador.cargosProtegidos(publicador.filtrar(pacote, Object.keys(publicador.CARGOS)));
+
+  const projeto = pastaProjeto();
+
+  return {
+    pasta,
+    projeto,
+    // Empacotado o projeto nao vem junto: publicar so faz sentido no
+    // computador onde o CtrLoja e mantido.
+    disponivel: fs.existsSync(path.join(projeto, 'mobile')),
+    // Ha repositorio para enviar? Sem ele, o botao do GitHub nao aparece.
+    temGit: fs.existsSync(path.join(projeto, '.git'))
+      && fs.existsSync(path.join(projeto, 'publicar-github.bat')),
+    ultima: info,
+    protegidos,
+    resumo: pacote.resumo
+  };
+});
+
+handle('publicacao:publicar', (senha) => {
+  if (!senha) throw new Error('Informe a senha da Loja.');
+
+  const pasta = pastaPublicacao();
+  if (!fs.existsSync(path.dirname(pasta))) {
+    throw new Error(
+      'A pasta do aplicativo do celular não foi encontrada em:\n'
+      + pastaProjeto() + '\n\n'
+      + 'A publicação só funciona no computador onde o projeto CtrLoja está.'
+    );
+  }
+
+  return publicador.publicar({
+    pacoteBruto: backup.montar(),
+    senha,
+    destino: pasta
+  });
+});
+
+/**
+ * Abre o publicar-github.bat numa janela de comando. Ele pede a
+ * mensagem do commit, que e coisa de quem publica - nao faz sentido
+ * automatizar e mandar sempre a mesma descricao.
+ */
+handle('publicacao:abrir-github', async () => {
+  const projeto = pastaProjeto();
+  const bat = path.join(projeto, 'publicar-github.bat');
+
+  if (!fs.existsSync(bat)) {
+    throw new Error('O publicar-github.bat não foi encontrado em:\n' + projeto);
+  }
+  if (!fs.existsSync(path.join(projeto, '.git'))) {
+    throw new Error(
+      'Esta pasta não é um repositório Git:\n' + projeto + '\n\n'
+      + 'O envio ao GitHub só funciona na pasta original do projeto.'
+    );
+  }
+
+  const erro = await shell.openPath(bat);
+  if (erro) throw new Error(erro);
+  return { arquivo: bat, projeto };
 });
 
 /* ------------------------------------------------------------------ */

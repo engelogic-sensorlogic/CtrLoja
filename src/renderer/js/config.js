@@ -365,6 +365,171 @@ App.views.config = {
         + 'Depois de definir, publique com <code>publicar-dados.bat</code> para que os celulares recebam.' })
     ]);
 
+    /* --------- Publicar para o celular --------- */
+    /*
+       O mesmo que o publicar-dados.bat fazia, agora sem sair do
+       programa: ninguém precisa abrir pasta nem linha de comando.
+       Fica FORA do formulário — a senha não pode virar configuração.
+    */
+    const boxPublicacao = el('div');
+
+    async function pintarPublicacao() {
+      const e = await tentar(window.api.publicacao.estado());
+      boxPublicacao.innerHTML = '';
+      if (!e) return;
+
+      if (!e.disponivel) {
+        boxPublicacao.appendChild(el('div', {
+          class: 'aviso',
+          text: 'Esta instalação não traz a pasta do aplicativo do celular. '
+            + 'A publicação é feita no computador onde o projeto CtrLoja é mantido.'
+        }));
+        return;
+      }
+
+      boxPublicacao.appendChild(el('div', {
+        class: e.ultima ? 'aviso info' : 'aviso',
+        style: 'font-size:13px',
+        text: e.ultima
+          ? `Última publicação: versão ${e.ultima.versao}, em `
+            + `${new Date(e.ultima.gerado_em).toLocaleString('pt-BR')} — `
+            + `${(e.ultima.bytes / 1024).toFixed(1)} KB cifrados.`
+          : 'Nada publicado ainda. O aplicativo do celular não tem dados para sincronizar.'
+      }));
+
+      boxPublicacao.appendChild(el('div', {
+        style: 'font-size:12.5px;color:var(--c-texto-suave);margin:8px 0',
+        text: 'Cargos com senha: ' + (e.protegidos.length ? e.protegidos.join(', ') : 'nenhum — os cargos ficam abertos no celular')
+      }));
+
+      // Onde grava, dito com todas as letras: rodando da copia local, a
+      // pasta do projeto NAO e a pasta de onde o aplicativo executa.
+      boxPublicacao.appendChild(el('div', {
+        style: 'font-size:12px;color:var(--c-texto-suave);margin-bottom:10px',
+        html: 'Publica em <code>' + esc(e.pasta) + '</code>'
+      }));
+
+      if (!e.temGit) {
+        boxPublicacao.appendChild(el('div', {
+          class: 'aviso', style: 'font-size:12.5px',
+          html: 'Esta pasta não é um repositório Git, então o envio ao GitHub não aparece aqui. '
+            + 'O pacote é gravado normalmente; envie depois pelo <code>publicar-github.bat</code> '
+            + 'na pasta do projeto.'
+        }));
+      }
+
+      boxPublicacao.appendChild(el('div', { class: 'linha compacta' }, [
+        el('button', { class: 'btn', text: '📲 Publicar para o celular', onclick: () => pedirSenhaEPublicar(e) }),
+        el('button', {
+          class: 'btn secundario', text: '📂 Abrir a pasta publicada',
+          onclick: () => window.api.app.abrirPasta(e.pasta)
+        })
+      ]));
+    }
+
+    function pedirSenhaEPublicar(estado) {
+      const senha = el('input', { type: 'password', placeholder: 'Senha da Loja', autocomplete: 'off' });
+      const repetir = el('input', { type: 'password', placeholder: 'Repita a senha', autocomplete: 'off' });
+
+      Modal.abrir({
+        titulo: 'Publicar dados para o aplicativo do celular',
+        largura: '620px',
+        corpo: el('div', {}, [
+          el('p', {
+            style: 'font-size:13px;color:var(--c-texto-suave);line-height:1.6;margin-top:0',
+            html: 'Os dados vão <strong>cifrados</strong> com esta senha. Use a MESMA que os Irmãos '
+              + 'digitam no celular ao sincronizar — se trocar, todos terão de digitar a nova.'
+          }),
+          el('label', { class: 'campo' }, [el('span', { text: 'Senha da Loja' }), senha]),
+          el('label', { class: 'campo' }, [el('span', { text: 'Repita a senha' }), repetir]),
+          el('div', {
+            class: 'aviso', style: 'font-size:12.5px',
+            html: 'Isto grava o pacote na pasta do projeto. Para os Irmãos receberem, falta ainda '
+              + '<strong>enviar ao GitHub</strong> — o botão aparece ao final.'
+          })
+        ]),
+        botoes: [
+          { texto: 'Cancelar', classe: 'secundario' },
+          {
+            texto: '📲 Publicar',
+            classe: '',
+            acao: async () => {
+              if (senha.value.trim().length < 4) { toast('A senha precisa ter pelo menos 4 caracteres.', 'erro'); return; }
+              if (senha.value !== repetir.value) { toast('As senhas não conferem.', 'erro'); return; }
+
+              const r = await tentar(window.api.publicacao.publicar(senha.value), 'Falha ao publicar');
+              if (!r) return;
+
+              Modal.fechar();
+              mostrarResultado(r, estado);
+              pintarPublicacao();
+            }
+          }
+        ]
+      });
+    }
+
+    function mostrarResultado(r, estado) {
+      const linhas = el('tbody');
+      for (const [t, n] of Object.entries(r.resumo || {})) {
+        linhas.appendChild(el('tr', {}, [
+          el('td', { style: 'width:220px;font-weight:600', text: t }),
+          el('td', { text: String(n) })
+        ]));
+      }
+
+      Modal.abrir({
+        titulo: 'Publicado com sucesso',
+        largura: '620px',
+        corpo: el('div', {}, [
+          el('div', {
+            class: 'aviso info',
+            html: `Versão <strong>${r.versao}</strong> gerada — ${(r.bytes / 1024).toFixed(1)} KB cifrados.<br>`
+              + 'Conferido: o arquivo abre com a senha e nenhum nome ficou em claro.'
+          }),
+          !r.protegidos.length ? el('div', {
+            class: 'aviso',
+            text: 'Nenhum cargo tem senha definida — no celular eles ficam abertos a qualquer Irmão. '
+              + 'Defina acima, em Senhas dos Cargos, e publique de novo.'
+          }) : null,
+          el('p', { style: 'font-size:13px;margin:14px 0 6px;font-weight:600', text: 'Conteúdo publicado' }),
+          el('table', {}, [linhas]),
+          el('div', {
+            class: 'aviso', style: 'margin-top:14px',
+            html: (estado && estado.temGit)
+              ? '<strong>Falta um passo:</strong> os Irmãos só recebem depois que isto for enviado '
+                + 'ao GitHub. O botão abaixo abre a janela de envio, que vai pedir uma descrição do que mudou.'
+              : '<strong>Falta um passo:</strong> os Irmãos só recebem depois que isto for enviado ao '
+                + 'GitHub. Rode o <code>publicar-github.bat</code> na pasta do projeto.'
+          })
+        ]),
+        botoes: [
+          { texto: (estado && estado.temGit) ? 'Depois' : 'Fechar', classe: 'secundario' },
+          (estado && estado.temGit) ? {
+            texto: '🚀 Enviar ao GitHub agora',
+            classe: '',
+            acao: async () => {
+              const r2 = await tentar(window.api.publicacao.abrirGithub(), 'Falha ao abrir o publicar-github.bat');
+              if (!r2) return;
+              Modal.fechar();
+              toast('Janela de envio aberta. Descreva o que mudou e tecle ENTER.', 'ok', 8000);
+            }
+          } : null
+        ].filter(Boolean)
+      });
+    }
+
+    const cardPublicacao = el('div', { class: 'cartao' }, [
+      el('h3', { text: 'Publicar para o aplicativo do celular' }),
+      el('p', {
+        style: 'font-size:12.5px;color:var(--c-texto-suave);line-height:1.6;margin-top:0',
+        text: 'Sempre que alterar Obreiros, sessões, modelos, presenças ou as senhas dos Cargos, '
+          + 'publique para que os celulares recebam. Os dados vão cifrados; sem a senha, '
+          + 'o arquivo no repositório não passa de texto embaralhado.'
+      }),
+      boxPublicacao
+    ]);
+
     /* --------- Montagem --------- */
     const form = el('form', { id: 'formConfig' }, [cardLoja, cardTitulos, cardDisparo, cardEventos]);
 
@@ -395,10 +560,12 @@ App.views.config = {
     alvo.appendChild(cardCheck);
     alvo.appendChild(cardRotina);
     alvo.appendChild(cardCargos);
+    alvo.appendChild(cardPublicacao);
     alvo.appendChild(cardBanco);
     await pintarCheck();
     await pintarRotina();
     await pintarCargos();
+    await pintarPublicacao();
 
     async function salvarConfig() {
       const fd = new FormData(form);

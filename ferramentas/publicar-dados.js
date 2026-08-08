@@ -164,12 +164,69 @@ function perguntarSenha(rotulo) {
   });
 }
 
-function lerVersaoAtual() {
-  const arq = path.join(DESTINO, ARQ_VERSAO);
+function lerVersaoAtual(destino) {
+  const arq = path.join(destino || DESTINO, ARQ_VERSAO);
   if (!fs.existsSync(arq)) return 0;
   try { return Number(JSON.parse(fs.readFileSync(arq, 'utf8')).versao) || 0; }
   catch { return 0; }
 }
+
+/* ------------------------------------------------------------------ */
+/* O trabalho em si                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Cifra e grava o pacote. Usada pela linha de comando E pelo botao
+ * "Publicar para o celular" dentro do CtrLoja - por isso nao imprime
+ * nada nem pergunta nada: recebe tudo pronto e devolve o resultado.
+ *
+ * @param {object} opcoes { pacoteBruto, senha, destino }
+ * @returns {object} info da publicacao, igual a gravada no versao.json
+ */
+function publicar(opcoes) {
+  const destino = opcoes.destino || DESTINO;
+  const pacote = filtrar(opcoes.pacoteBruto, Object.keys(CARGOS));
+
+  const envelope = cripto.cifrar(pacote, opcoes.senha);
+  const textoEnvelope = JSON.stringify(envelope, null, 2);
+
+  fs.mkdirSync(destino, { recursive: true });
+  fs.writeFileSync(path.join(destino, ARQ_DADOS), textoEnvelope, 'utf8');
+
+  const info = {
+    formato: 'ctrloja-versao',
+    versao: lerVersaoAtual(destino) + 1,
+    gerado_em: pacote.gerado_em,
+    arquivo: ARQ_DADOS,
+    bytes: Buffer.byteLength(textoEnvelope, 'utf8'),
+    impressao: cripto.impressao(textoEnvelope),
+    cargos: pacote.cargos
+  };
+  fs.writeFileSync(path.join(destino, ARQ_VERSAO), JSON.stringify(info, null, 2) + '\n', 'utf8');
+
+  /* --- conferencias: o arquivo abre de volta e nada vazou em claro --- */
+
+  const conferido = cripto.decifrar(
+    JSON.parse(fs.readFileSync(path.join(destino, ARQ_DADOS), 'utf8')), opcoes.senha
+  );
+  if (JSON.stringify(conferido) !== JSON.stringify(pacote)) {
+    throw new Error('O arquivo gravado não confere com a origem. Nada foi publicado.');
+  }
+
+  const nomes = (pacote.dados.obreiros || []).map((o) => o.nome).filter(Boolean);
+  const vazou = nomes.find((n) => textoEnvelope.indexOf(n) >= 0);
+  if (vazou) throw new Error(`Falha de segurança: "${vazou}" aparece em claro no arquivo.`);
+
+  return Object.assign({ destino, resumo: resumoDe(pacote), protegidos: cargosProtegidos(pacote) }, info);
+}
+
+const resumoDe = (pacote) => Object.fromEntries(
+  Object.entries(pacote.dados).map(([t, linhas]) => [t, linhas.length])
+);
+
+const cargosProtegidos = (pacote) => (pacote.dados.config || [])
+  .filter((l) => String(l.chave || '').startsWith(PREFIXO_SENHA_CARGO) && l.valor)
+  .map((l) => l.chave.slice(PREFIXO_SENHA_CARGO.length));
 
 /* ------------------------------------------------------------------ */
 
@@ -201,9 +258,7 @@ async function principal() {
   const fora = Object.keys(bruto.dados || {}).filter((t) => !(t in pacote.dados));
   if (fora.length) console.log(`\nFica no computador: ${fora.join(', ')}`);
 
-  const protegidos = (pacote.dados.config || [])
-    .filter((l) => String(l.chave || '').startsWith(PREFIXO_SENHA_CARGO) && l.valor)
-    .map((l) => l.chave.slice(PREFIXO_SENHA_CARGO.length));
+  const protegidos = cargosProtegidos(pacote);
   console.log('\nCargos com senha definida: ' + (protegidos.length ? protegidos.join(', ') : 'nenhum'));
   if (!protegidos.length) {
     console.log('  [AVISO] Sem senha, os Cargos ficam abertos no celular de qualquer Irmao.');
@@ -218,44 +273,27 @@ async function principal() {
     if (senha !== conferir) throw new Error('As senhas não conferem.');
   }
 
-  const envelope = cripto.cifrar(pacote, senha);
-  const textoEnvelope = JSON.stringify(envelope, null, 2);
-  const impressao = cripto.impressao(textoEnvelope);
-
-  fs.mkdirSync(DESTINO, { recursive: true });
-  fs.writeFileSync(path.join(DESTINO, ARQ_DADOS), textoEnvelope, 'utf8');
-
-  const versao = lerVersaoAtual() + 1;
-  const info = {
-    formato: 'ctrloja-versao',
-    versao,
-    gerado_em: pacote.gerado_em,
-    arquivo: ARQ_DADOS,
-    bytes: Buffer.byteLength(textoEnvelope, 'utf8'),
-    impressao,
-    cargos: pacote.cargos
-  };
-  fs.writeFileSync(path.join(DESTINO, ARQ_VERSAO), JSON.stringify(info, null, 2) + '\n', 'utf8');
-
-  // Conferencia: o que foi gravado abre de volta?
-  const conferido = cripto.decifrar(JSON.parse(fs.readFileSync(path.join(DESTINO, ARQ_DADOS), 'utf8')), senha);
-  if (JSON.stringify(conferido) !== JSON.stringify(pacote)) {
-    throw new Error('O arquivo gravado não confere com a origem. Nada foi publicado.');
-  }
-
-  // Nenhum nome pode ter escapado em claro
-  const nomes = (pacote.dados.obreiros || []).map((o) => o.nome).filter(Boolean);
-  const vazou = nomes.find((n) => textoEnvelope.indexOf(n) >= 0);
-  if (vazou) throw new Error(`Falha de segurança: "${vazou}" aparece em claro no arquivo.`);
+  // Daqui para baixo e o mesmo caminho que o botao dentro do CtrLoja
+  // percorre. Uma funcao so, para nao existirem dois jeitos de publicar
+  // que um dia possam divergir.
+  const info = publicar({ pacoteBruto: bruto, senha, destino: DESTINO });
 
   console.log(`\nPublicado em ${path.relative(RAIZ, DESTINO) || DESTINO}/`);
   console.log(`  ${ARQ_DADOS}    ${(info.bytes / 1024).toFixed(1)} KB  (cifrado)`);
-  console.log(`  ${ARQ_VERSAO}   versão ${versao}`);
+  console.log(`  ${ARQ_VERSAO}   versão ${info.versao}`);
   console.log(`\nConferido: o arquivo abre com a senha e nenhum nome ficou em claro.`);
   console.log('\nPróximo passo: publicar-github.bat  ->  o celular verá a novidade ao Sincronizar.\n');
 }
 
-principal().catch((err) => {
-  console.error(`\n[ERRO] ${err.message}\n`);
-  process.exit(1);
-});
+/* Executado direto pelo .bat: roda. Carregado pelo CtrLoja: so exporta. */
+if (require.main === module) {
+  principal().catch((err) => {
+    console.error(`\n[ERRO] ${err.message}\n`);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  publicar, filtrar, cargosProtegidos, resumoDe,
+  CARGOS, CONFIG_PUBLICADA, DESTINO_PADRAO, ARQ_DADOS, ARQ_VERSAO
+};
