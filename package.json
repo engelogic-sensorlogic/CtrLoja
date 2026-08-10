@@ -13,7 +13,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "test": "node test/teste-calendario.js && node --no-warnings test/teste-integracao.js && node --no-warnings test/teste-rotina.js && node --no-warnings test/teste-mobile.js && node --no-warnings test/teste-cripto.js && node --no-warnings test/teste-sincronizacao.js && node --no-warnings test/teste-presenca.js && node --no-warnings test/teste-publicacao.js && node --no-warnings test/teste-telas-celular.js",
+    "test": "node --no-warnings test/teste-driver.js && node test/teste-calendario.js && node --no-warnings test/teste-integracao.js && node --no-warnings test/teste-rotina.js && node --no-warnings test/teste-mobile.js && node --no-warnings test/teste-cripto.js && node --no-warnings test/teste-sincronizacao.js && node --no-warnings test/teste-presenca.js && node --no-warnings test/teste-publicacao.js && node --no-warnings test/teste-convite.js && node --no-warnings test/teste-telas-pc.js && node --no-warnings test/teste-telas-celular.js",
     "modelos": "node ferramentas/sincronizar-modelos.js",
     "verificar-pacote": "node ferramentas/verificar-pacote.js",
     "publicar-dados": "node ferramentas/publicar-dados.js",
@@ -48,8 +48,11 @@
       "!test/**",
       "!ferramentas/**",
       "!docs/**",
-      "!mobile/**"
+      "!mobile/**",
+      "ferramentas/publicar-dados.js",
+      "!node_modules/better-sqlite3/**"
     ],
+    "npmRebuild": false,
     "extraFiles": [
       {
         "from": ".",
@@ -68,9 +71,6 @@
       "icon": "build/icon.ico",
       "artifactName": "${productName}-${version}.${ext}"
     },
-    "asar": true,
-    "asarUnpack": [
-      "**/node_modules/better-sqlite3/**"
-    ]
+    "asar": true
   }
 }

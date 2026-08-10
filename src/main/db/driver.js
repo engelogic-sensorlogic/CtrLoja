@@ -15,10 +15,34 @@ let Impl = null;
 let motor = null;
 
 /* ---------------- 1) better-sqlite3 ---------------- */
+/*
+ * NAO basta o modulo carregar.
+ *
+ * O better-sqlite3 e um modulo NATIVO: o JavaScript dele carrega
+ * sempre, mas so funciona se o binario .node correspondente tiver sido
+ * compilado. Quando falta o binario, o require passa limpo e o erro so
+ * estoura la adiante, no primeiro "new Database" - com uma mensagem
+ * enorme sobre "bindings file", em plena tela do usuario.
+ *
+ * Foi o que aconteceu quando o npm passou a bloquear scripts de
+ * instalacao por padrao: o pacote ficou instalado pela metade, o
+ * require continuou funcionando e a escolha do motor apontou para um
+ * driver que nao abria banco nenhum.
+ *
+ * Por isso a escolha e feita ABRINDO um banco de verdade. Se abrir,
+ * serve; se nao, cai para o node:sqlite em silencio, que e o que o
+ * usuario espera de uma alternativa.
+ */
 try {
-  Impl = require('better-sqlite3');
+  const Candidato = require('better-sqlite3');
+  const prova = new Candidato(':memory:');
+  prova.close();
+  Impl = Candidato;
   motor = 'better-sqlite3';
-} catch { /* segue para o proximo */ }
+} catch (err) {
+  motor = null;
+  if (process.env.CTRLOJA_DEBUG) console.log('[db] better-sqlite3 indisponível:', err.message);
+}
 
 /* ---------------- 2) node:sqlite ------------------- */
 if (!Impl) {
@@ -32,6 +56,28 @@ if (!Impl) {
       '(que possui o módulo node:sqlite embutido).\n' + err.message
     );
   }
+
+  /*
+   * O node:sqlite do Node 24 devolve cada linha com PROTOTIPO NULO -
+   * objetos criados por Object.create(null), sem toString, sem
+   * hasOwnProperty, sem nada herdado. Ate o Node 22 vinham objetos
+   * comuns. Os dados sao os mesmos; o que mudou foi a natureza do
+   * objeto, e isso quebra de maneiras pouco obvias:
+   *
+   *   `${linha}`            -> TypeError: Cannot convert object to primitive
+   *   linha instanceof Object -> false
+   *   linha.hasOwnProperty(...) -> nao existe
+   *
+   * O better-sqlite3 sempre devolveu objetos comuns. Como o CtrLoja
+   * troca de motor conforme o que estiver disponivel, os dois lados
+   * precisam entregar a MESMA coisa - senao o programa se comporta
+   * diferente conforme a maquina, que e o pior tipo de defeito.
+   *
+   * A normalizacao acontece aqui, na fronteira com o banco, e nao
+   * espalhada pelo codigo.
+   */
+  const comum = (linha) => (linha ? Object.assign({}, linha) : linha);
+  const comuns = (linhas) => (Array.isArray(linhas) ? linhas.map(comum) : linhas);
 
   /** Adaptador com a mesma superfície de API do better-sqlite3 usada pelo CtrLoja. */
   class AdaptadorNodeSqlite {
@@ -54,8 +100,8 @@ if (!Impl) {
       const st = this.db.prepare(sql);
       return {
         run: (...a) => st.run(...a),
-        get: (...a) => st.get(...a),
-        all: (...a) => st.all(...a)
+        get: (...a) => comum(st.get(...a)),
+        all: (...a) => comuns(st.all(...a))
       };
     }
 

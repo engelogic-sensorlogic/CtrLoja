@@ -31,6 +31,17 @@ const ok = (n, c, e = '') => {
   if (!c) falhas++;
 };
 
+/*
+ * O jsdom sao centenas de arquivos. Lidos de unidade mapeada, ou por
+ * VPN, o simples require leva minutos e parece travamento. Nessas
+ * condicoes o teste se declara pulado em vez de segurar a bateria.
+ */
+if (process.env.CTRLOJA_SEM_JSDOM === '1') {
+  console.log('\n[PULADO] Telas do celular — o projeto está em unidade de rede.');
+  console.log('         Rode a bateria do disco local para incluir este teste.\n');
+  process.exit(0);
+}
+
 let JSDOM;
 try {
   ({ JSDOM } = require('jsdom'));

@@ -14,6 +14,7 @@ const cripto = require('./services/cripto');
 const presenca = require('./services/presenca');
 const presencaPacote = require('./services/presenca-pacote');
 const presencaPdf = require('./services/presenca-pdf');
+const convitePdf = require('./services/convite-pdf');
 
 const isDev = process.argv.includes('--dev');
 
@@ -398,31 +399,54 @@ handle('presenca:ler-pacote', async (origem, conteudo) => {
   };
 });
 
-handle('presenca:exportar-pdf', async (data) => {
-  const lista = presenca.listaDaSessao(data);
-  if (!lista.itens.length) throw new Error('Não há Obreiros no quadro para esta sessão.');
-
-  const sugestao = `Lista de Presenca - ${data}.pdf`;
-  const res = await dialog.showSaveDialog(mainWindow, {
-    title: 'Exportar lista de presença em PDF',
-    defaultPath: path.join(app.getPath('documents'), sugestao),
-    filters: [{ name: 'PDF', extensions: ['pdf'] }]
-  });
-  if (res.canceled) return { cancelado: true };
-
+/** Caminhos dos logotipos da Loja, usados nos dois documentos. */
+function logosDaLoja() {
   const raiz = resolveAppRoot();
   const exts = ['.png', '.jpg', '.jpeg', '.webp', '.svg'];
-  const acharLogo = (base) => {
+  const achar = (base) => {
     for (const ext of exts) {
       const p = path.join(raiz, base + ext);
       if (fs.existsSync(p)) return p;
     }
     return null;
   };
+  return { logo1: achar('Logo1'), logo2: achar('Logo2') };
+}
+
+async function ondeSalvarPdf(titulo, sugestao) {
+  const res = await dialog.showSaveDialog(mainWindow, {
+    title: titulo,
+    defaultPath: path.join(app.getPath('documents'), sugestao),
+    filters: [{ name: 'PDF', extensions: ['pdf'] }]
+  });
+  return res.canceled ? null : res.filePath;
+}
+
+handle('presenca:exportar-pdf', async (data) => {
+  const lista = presenca.listaDaSessao(data);
+  if (!lista.itens.length) throw new Error('Não há Obreiros no quadro para esta sessão.');
+
+  const destino = await ondeSalvarPdf('Exportar lista de presença em PDF', `Lista de Presenca - ${data}.pdf`);
+  if (!destino) return { cancelado: true };
 
   const r = await presencaPdf.gerar(
-    BrowserWindow, res.filePath, lista, db.config.obterTodas(),
-    { logo1: acharLogo('Logo1'), logo2: acharLogo('Logo2') }
+    BrowserWindow, destino, lista, db.config.obterTodas(), logosDaLoja()
+  );
+  return Object.assign({ cancelado: false }, r);
+});
+
+handle('presenca:exportar-pdf-frequencia', async (filtro) => {
+  const est = presenca.estatisticas(filtro || {});
+  if (!est.total_sessoes) {
+    throw new Error('Nenhuma chamada registrada ainda — não há frequência para relatar.');
+  }
+
+  const hoje = new Date().toISOString().slice(0, 10);
+  const destino = await ondeSalvarPdf('Exportar relatório de frequência', `Frequencia dos Obreiros - ${hoje}.pdf`);
+  if (!destino) return { cancelado: true };
+
+  const r = await presencaPdf.gerarFrequencia(
+    BrowserWindow, destino, est, db.config.obterTodas(), logosDaLoja()
   );
   return Object.assign({ cancelado: false }, r);
 });
@@ -438,27 +462,75 @@ handle('presenca:exportar-pdf', async (data) => {
  * funcao que o .bat chama, entao os dois caminhos nao podem divergir.
  */
 
-const publicador = require(path.join(__dirname, '..', '..', 'ferramentas', 'publicar-dados.js'));
+/*
+ * A pasta ferramentas/ NAO entra no instalador (veja "files" no
+ * package.json): publicar so faz sentido no computador onde o projeto
+ * CtrLoja e mantido.
+ *
+ * Por isso o modulo e carregado sob demanda e com rede de protecao. Um
+ * require solto aqui em cima derrubaria o aplicativo INSTALADO logo na
+ * abertura, antes de qualquer janela - e sem mensagem util.
+ */
+let publicadorCache;
+function carregarPublicador() {
+  if (publicadorCache !== undefined) return publicadorCache;
+  // Vem SEMPRE de dentro do aplicativo - inclusive do pacote instalado,
+  // que agora leva o publicar-dados.js junto. Buscar na pasta do projeto
+  // faria a versao do programa depender do que ha no disco do usuario.
+  try {
+    publicadorCache = require(path.join(__dirname, '..', '..', 'ferramentas', 'publicar-dados.js'));
+  } catch (err) {
+    console.log('[ctrloja] Publicação para o celular indisponível:', err.message);
+    publicadorCache = null;
+  }
+  return publicadorCache;
+}
+
+/** Cargos com senha definida, sem depender do publicador. */
+function cargosComSenha() {
+  const cfg = db.config.obterTodas();
+  return Object.keys(cfg)
+    .filter((c) => c.startsWith('senha_cargo_') && cfg[c])
+    .map((c) => c.slice('senha_cargo_'.length));
+}
+
+/** A pasta serve para publicar? Precisa ter o aplicativo do celular. */
+function pastaDeProjeto(p) {
+  if (!p) return false;
+  const limpa = String(p).replace(/[\\/]+$/, '');
+  return fs.existsSync(path.join(limpa, 'mobile'))
+    && fs.existsSync(path.join(limpa, 'mobile', 'index.html'));
+}
 
 /**
  * Pasta do PROJETO - que nem sempre e a pasta de onde o aplicativo roda.
  *
- * Estando o projeto em unidade mapeada, o rodar.bat executa a partir de
- * uma copia local descartavel, sem o .git. Publicar ali seria perder o
- * trabalho: a copia e refeita a cada abertura. O rodar.bat entao informa
- * o caminho original em CTRLOJA_PROJETO, e e ele que vale aqui.
+ * Sao tres origens, nesta ordem:
+ *
+ *  1. a escolhida pelo usuario em Configuracoes. E o caso do aplicativo
+ *     INSTALADO: ele nao traz o aplicativo do celular dentro de si, e
+ *     nem poderia gravar em Arquivos de Programas. O Irmao aponta a
+ *     pasta do projeto - normalmente um clone do repositorio - e a
+ *     publicacao passa a funcionar como no computador principal;
+ *
+ *  2. a informada pelo rodar.bat, quando o projeto esta em unidade
+ *     mapeada e o aplicativo roda de uma copia local descartavel;
+ *
+ *  3. a propria pasta de execucao, que e o caso comum em desenvolvimento.
  */
 function pastaProjeto() {
+  const escolhida = db.config.obter('pasta_publicacao', '');
+  if (escolhida && pastaDeProjeto(escolhida)) return String(escolhida).replace(/[\\/]+$/, '');
+
   const informada = process.env.CTRLOJA_PROJETO;
   if (informada) {
     const limpa = informada.replace(/[\\/]+$/, '');
     // So aceita se for mesmo um projeto CtrLoja - variavel velha no
     // ambiente nao pode mandar o pacote para um lugar qualquer.
-    if (fs.existsSync(path.join(limpa, 'package.json')) && fs.existsSync(path.join(limpa, 'mobile'))) {
-      return limpa;
-    }
+    if (fs.existsSync(path.join(limpa, 'package.json')) && pastaDeProjeto(limpa)) return limpa;
     console.warn(`[ctrloja] CTRLOJA_PROJETO ignorado (não parece um projeto CtrLoja): ${informada}`);
   }
+
   return resolveAppRoot();
 }
 
@@ -475,28 +547,97 @@ handle('publicacao:estado', () => {
     if (fs.existsSync(arq)) info = JSON.parse(fs.readFileSync(arq, 'utf8'));
   } catch { info = null; }
 
-  const pacote = backup.montar();
-  const protegidos = publicador.cargosProtegidos(publicador.filtrar(pacote, Object.keys(publicador.CARGOS)));
-
   const projeto = pastaProjeto();
 
   return {
     pasta,
     projeto,
-    // Empacotado o projeto nao vem junto: publicar so faz sentido no
-    // computador onde o CtrLoja e mantido.
-    disponivel: fs.existsSync(path.join(projeto, 'mobile')),
+    // A pasta do aplicativo do celular nao vem dentro do instalador -
+    // ela e apontada pelo Irmao em Configuracoes.
+    disponivel: !!carregarPublicador() && pastaDeProjeto(projeto),
+    escolhida: db.config.obter('pasta_publicacao', '') || null,
+    endereco: db.config.obter('endereco_app', '') || convitePdf.ENDERECO_PADRAO,
     // Ha repositorio para enviar? Sem ele, o botao do GitHub nao aparece.
     temGit: fs.existsSync(path.join(projeto, '.git'))
       && fs.existsSync(path.join(projeto, 'publicar-github.bat')),
     ultima: info,
-    protegidos,
-    resumo: pacote.resumo
+    protegidos: cargosComSenha(),
+    resumo: backup.montar().resumo
   };
+});
+
+/**
+ * Aponta a pasta do projeto CtrLoja - a que tem o aplicativo do celular
+ * dentro. Sem isto, o programa instalado nao teria onde publicar.
+ */
+handle('publicacao:escolher-pasta', async () => {
+  const res = await dialog.showOpenDialog(mainWindow, {
+    title: 'Onde fica a pasta do projeto CtrLoja?',
+    properties: ['openDirectory'],
+    message: 'Escolha a pasta que contém a subpasta "mobile" — normalmente a cópia do repositório.'
+  });
+  if (res.canceled) return { cancelado: true };
+
+  const escolhida = res.filePaths[0];
+  if (!pastaDeProjeto(escolhida)) {
+    throw new Error(
+      'Esta pasta não contém o aplicativo do celular:\n' + escolhida + '\n\n'
+      + 'Escolha a pasta do projeto CtrLoja — a que tem, dentro dela, uma subpasta "mobile".'
+    );
+  }
+
+  db.config.salvarVarias({ pasta_publicacao: escolhida });
+  return { cancelado: false, pasta: escolhida };
+});
+
+handle('publicacao:esquecer-pasta', () => {
+  db.config.salvarVarias({ pasta_publicacao: '' });
+  return { pasta: pastaProjeto() };
+});
+
+/* ---- Convite: como o Irmão instala o aplicativo no celular ---- */
+
+const enderecoDoApp = () => db.config.obter('endereco_app', '') || convitePdf.ENDERECO_PADRAO;
+
+handle('publicacao:salvar-endereco', (endereco) => {
+  const limpo = String(endereco || '').trim();
+  if (limpo && !/^https:\/\//i.test(limpo)) {
+    throw new Error(
+      'O endereço precisa começar com https://\n\n'
+      + 'Sem conexão segura o navegador não libera a criptografia, e o Sincronizar não funciona.'
+    );
+  }
+  db.config.salvarVarias({ endereco_app: limpo });
+  return { endereco: enderecoDoApp() };
+});
+
+handle('publicacao:convite-texto', () => ({
+  texto: convitePdf.mensagem(db.config.obterTodas(), enderecoDoApp()),
+  endereco: enderecoDoApp()
+}));
+
+handle('publicacao:convite-pdf', async () => {
+  const destino = await ondeSalvarPdf(
+    'Salvar a folha de instalação', 'Instalar o CtrLoja no celular.pdf'
+  );
+  if (!destino) return { cancelado: true };
+
+  const r = await convitePdf.gerar(
+    BrowserWindow, destino, enderecoDoApp(), db.config.obterTodas(), logosDaLoja()
+  );
+  return Object.assign({ cancelado: false }, r);
 });
 
 handle('publicacao:publicar', (senha) => {
   if (!senha) throw new Error('Informe a senha da Loja.');
+
+  const publicador = carregarPublicador();
+  if (!publicador) {
+    throw new Error(
+      'Esta instalação não traz as ferramentas de publicação.\n'
+      + 'Publique a partir do computador onde o projeto CtrLoja está.'
+    );
+  }
 
   const pasta = pastaPublicacao();
   if (!fs.existsSync(path.dirname(pasta))) {

@@ -326,6 +326,21 @@ App.views.presenca = {
         return card;
       }
 
+      card.appendChild(el('div', { class: 'linha compacta', style: 'margin-bottom:12px' }, [
+        el('button', {
+          class: 'btn', text: '📄 Exportar relatório para o mural',
+          onclick: async () => {
+            const r = await tentar(window.api.presenca.exportarPdfFrequencia({}), 'Falha ao gerar o relatório');
+            if (r && !r.cancelado) toast(`Relatório salvo em ${r.arquivo}`, 'ok', 8000);
+          }
+        })
+      ]));
+      card.appendChild(el('p', {
+        style: 'font-size:12px;color:var(--c-texto-suave);margin:0 0 12px',
+        text: 'Gera um PDF com o gráfico de comparecimento e a frequência de cada Irmão, '
+          + 'pronto para imprimir e afixar no mural da Loja.'
+      }));
+
       const corpo = el('tbody');
       for (const o of est.obreiros) {
         const cor = o.percentual >= 75 ? 'var(--c-ok)'

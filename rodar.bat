@@ -275,7 +275,20 @@ goto :FIM
 REM ------------------------------------------------------------------
 :TESTES
 echo [2/3] Executando os testes automatizados...
+
+REM  Os dois testes de tela usam o jsdom - centenas de arquivos. Lidos
+REM  de unidade mapeada, ou por VPN, o require sozinho leva minutos e
+REM  parece travamento. Fora do disco C: eles se declaram pulados.
+if /i not "%~d0"=="C:" (
+  set "CTRLOJA_SEM_JSDOM=1"
+  echo       [NOTA] Projeto em %~d0 - os testes de tela serao pulados.
+  echo              Rode a bateria do disco local para inclui-los.
+)
 echo.
+REM  Primeiro o driver: nao adianta testar regra de negocio se o banco
+REM  esta entregando as linhas de um jeito que o programa nao espera.
+call node --no-warnings test\teste-driver.js
+if errorlevel 1 goto :FALHA
 call node test\teste-calendario.js
 if errorlevel 1 goto :FALHA
 call node --no-warnings test\teste-integracao.js
@@ -291,6 +304,10 @@ if errorlevel 1 goto :FALHA
 call node --no-warnings test\teste-presenca.js
 if errorlevel 1 goto :FALHA
 call node --no-warnings test\teste-publicacao.js
+if errorlevel 1 goto :FALHA
+call node --no-warnings test\teste-convite.js
+if errorlevel 1 goto :FALHA
+call node --no-warnings test\teste-telas-pc.js
 if errorlevel 1 goto :FALHA
 REM  Telas do celular: so roda se o jsdom estiver instalado; senao ele
 REM  mesmo avisa e passa adiante, sem reprovar nada.

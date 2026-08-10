@@ -333,12 +333,173 @@ ok('traz grau e tipo da sessão', /Magna/.test(html) && /Mestre/.test(html));
 ok('lista os presentes', /João Carlos de Souza/.test(html));
 ok('separa os ausentes', /Ausentes \(/.test(html));
 ok('tem espaço de rubrica', /rubrica/i.test(html));
-ok('tem as assinaturas de fechamento',
-  /Chanceler/.test(html) && /Venerável Mestre/.test(html));
 ok('define página A4', /@page[^}]*A4/.test(html));
 ok('escapa conteúdo do banco', !/<script/i.test(html));
 
+console.log('\n== Aproveitamento da folha ==');
+
+const margem = (html.match(/@page\s*\{[^}]*margin:\s*([^;]+);/) || [])[1] || '';
+ok('margens estreitas em cima e embaixo', /^8mm\s+14mm$/.test(margem.trim()), margem.trim());
+ok('laterais preservadas em 14mm', /14mm/.test(margem));
+
+// A altura da linha vem do respiro vertical da celula: 6px de cada lado
+// davam ~25px de linha; 8.5px levam a ~30px, os 20% pedidos.
+const respiro = Number((html.match(/table\.lista td[^}]*padding:\s*([\d.]+)px/) || [])[1]);
+ok('linhas 20% mais altas', respiro === 8.5, respiro + 'px de respiro vertical');
+const alturaAntes = 2 * 6 + 13.3;
+const alturaAgora = 2 * respiro + 13.3;
+ok('conferindo a conta do aumento',
+  Math.abs((alturaAgora / alturaAntes - 1) * 100 - 20) < 1.5,
+  `${alturaAntes.toFixed(1)}px → ${alturaAgora.toFixed(1)}px (+${((alturaAgora / alturaAntes - 1) * 100).toFixed(0)}%)`);
+
+const larguraRubrica = Number((html.match(/td\.rubrica[^}]*width:\s*(\d+)px/) || [])[1]);
+const larguraGrau = Number((html.match(/td\.grau[^}]*width:\s*(\d+)px/) || [])[1]);
+ok('coluna Rubrica bem mais larga', larguraRubrica === 260, larguraRubrica + 'px');
+ok('coluna Grau enxuta', larguraGrau === 78, larguraGrau + 'px');
+
+// A coluna Obreiro nao tem largura fixa: fica com o que sobra. Numa A4
+// com 14mm de margem lateral sobram cerca de 688px de conteudo.
+const sobra = 688 - 26 - larguraGrau - larguraRubrica;
+ok('ainda sobra espaço confortável para o nome do Irmão', sobra > 280, sobra + 'px para a coluna Obreiro');
+
+console.log('\n== Espaço em branco anulado ==');
+
+ok('tem a área de anulação', /class="anulado"/.test(html));
+ok('a área fica entre a relação e a assinatura',
+  html.indexOf('class="anulado"') > html.indexOf('<!-- corpo -->')
+  && html.indexOf('class="anulado"') < html.indexOf('class="assinatura"'));
+ok('é ela que estica e empurra a assinatura', /\.anulado[^}]*flex:\s*1 1 auto/.test(html));
+ok('o corpo não disputa esse espaço', /\.corpo[^}]*flex:\s*0 0 auto/.test(html));
+ok('desenha o traço diagonal', /\.anulado[^}]*linear-gradient\(to bottom right/.test(html));
+ok('diz o que aquele espaço significa', /espaço sem informação/.test(html));
+ok('tem altura mínima, mesmo com a folha cheia', /\.anulado[^}]*min-height:\s*14mm/.test(html));
+
+// Sem moldura: só o traço. As bordas poluíam a folha.
+ok('sem moldura em volta', !/\.anulado\s*\{[^}]*border:/.test(html));
+
+// Partindo entre folhas, sobrava uma tira solta no pé da página anterior.
+ok('nunca se parte entre folhas',
+  /\.anulado[^}]*break-inside:\s*avoid/.test(html)
+  && /\.anulado[^}]*page-break-inside:\s*avoid/.test(html));
+ok('o corpo tem folga antes da quebra de página',
+  /\.corpo[^}]*padding-bottom:\s*8mm/.test(html));
+
+console.log('\n== Contagem de folhas do PDF gerado ==');
+
+/*
+ * A altura do espaço anulado é procurada por bissecção, e quem diz se
+ * uma tentativa serve é a contagem de folhas do PDF recém-impresso.
+ * Se esta contagem errar, o documento ganha uma folha em branco ou a
+ * assinatura sobe para o meio da página.
+ */
+const folhaFalsa = (n) => Buffer.from(
+  '%PDF-1.4\n1 0 obj<</Type /Pages /Count ' + n + '>>endobj\n'
+  + Array.from({ length: n }, (_, i) => `${i + 2} 0 obj<</Type /Page /Parent 1 0 R>>endobj\n`).join('')
+);
+
+ok('conta uma folha', pdf.contarPaginas(folhaFalsa(1)) === 1);
+ok('conta duas folhas', pdf.contarPaginas(folhaFalsa(2)) === 2);
+ok('conta doze folhas', pdf.contarPaginas(folhaFalsa(12)) === 12);
+ok('não confunde /Pages com /Page', pdf.contarPaginas(folhaFalsa(3)) === 3,
+  'a árvore /Type /Pages não pode entrar na conta');
+ok('aceita variação de espaço', pdf.contarPaginas(Buffer.from('/Type/Page x /Type  /Page y')) === 2);
+ok('arquivo sem página nenhuma conta como uma', pdf.contarPaginas(Buffer.from('%PDF-1.4')) === 1);
+
+ok('a conta da folha bate com A4 menos as margens',
+  Math.round(pdf.ALTURA_FOLHA_MM) === 281 && Math.abs(pdf.ALTURA_FOLHA_PX - 1062) < 2,
+  `${pdf.ALTURA_FOLHA_MM}mm = ${pdf.ALTURA_FOLHA_PX.toFixed(0)}px`);
+ok('há um piso para o espaço anulado não virar risco solto',
+  pdf.ALTURA_MINIMA_ANULADO >= 20, pdf.ALTURA_MINIMA_ANULADO + 'px');
+
+console.log('\n== Assinatura: só o Chanceler ==');
+ok('assina o Chanceler', /<small>Chanceler<\/small>/.test(html));
+ok('NÃO pede assinatura do Secretário', !/Secretário/.test(html));
+ok('NÃO pede assinatura do Venerável', !/Venerável/.test(html));
+ok('uma única linha de assinatura',
+  (html.match(/class="linha"/g) || []).length === 1,
+  String((html.match(/class="linha"/g) || []).length));
+
+// A folha vira uma coluna flexivel de altura util da pagina e a
+// assinatura recebe margin-top:auto - e isso que a empurra para baixo.
+ok('a folha ocupa a altura útil da página', /\.folha[^}]*min-height:\s*281mm/.test(html));
+ok('a folha é uma coluna flexível', /\.folha[^}]*flex-direction:\s*column/.test(html));
+ok('a assinatura é empurrada para baixo', /\.assinatura[^}]*margin-top:\s*auto/.test(html));
+
+const respiroAcima = Number((html.match(/\.assinatura\s*\{[^}]*padding-top:\s*(\d+)px/) || [])[1]);
+const respiroAbaixo = Number((html.match(/\.assinatura \.linha[^}]*margin:\s*0 auto (\d+)px/) || [])[1]);
+ok('respiro triplo acima do traço', respiroAcima === 90, respiroAcima + 'px (era 30px)');
+ok('respiro duplo entre o traço e o rótulo', respiroAbaixo === 8, respiroAbaixo + 'px (era 4px)');
+ok('a assinatura não se parte entre folhas', /\.assinatura[^}]*break-inside:\s*avoid/.test(html));
+ok('assinatura vem depois do corpo',
+  html.indexOf('class="assinatura"') > html.indexOf('<!-- corpo -->'));
+ok('assinatura fica logo acima do rodapé',
+  html.indexOf('class="assinatura"') < html.indexOf('class="rodape"'));
+ok('assinatura não se parte entre páginas', /\.assinatura[^}]*page-break-inside:\s*avoid/.test(html));
+
 ok('data por extenso do módulo', pdf.dataExtenso('2026-08-10') === '10 de agosto de 2026');
+
+/* ------------------------------------------------------------------ */
+/* 8. Relatorio de frequencia para o mural                             */
+/* ------------------------------------------------------------------ */
+
+console.log('\n== Relatório de frequência (mural) ==');
+
+const estMural = presenca.estatisticas({});
+const mural = pdf.montarHtmlFrequencia(estMural, cfg, {});
+
+ok('traz o nome da Loja', mural.includes(cfg.loja_nome || 'Loja'));
+ok('título próprio, não é lista de presença',
+  /FREQUÊNCIA DOS OBREIROS/.test(mural) && !/LISTA DE PRESENÇA/.test(mural));
+ok('declara o período coberto', /de \d+ de \w+ de \d{4} a \d+ de \w+ de \d{4}/.test(mural));
+
+ok('mostra os números da Loja',
+  mural.includes('>Sessões<') && mural.includes('>Obreiros no quadro<')
+  && mural.includes('>Média de presentes<') && mural.includes('>Comparecimento médio<'));
+
+ok('desenha o gráfico em SVG', /<svg[^>]*viewBox/.test(mural));
+ok('o gráfico tem uma barra por sessão',
+  (mural.match(/<rect /g) || []).length === estMural.sessoes.length,
+  `${(mural.match(/<rect /g) || []).length} barras para ${estMural.sessoes.length} sessões`);
+ok('o gráfico marca a média', /stroke-dasharray/.test(mural));
+ok('o gráfico traz a régua de porcentagem', /&gt;|>25%</.test(mural) || mural.includes('>25%<'));
+
+ok('lista todos os Irmãos com frequência',
+  estMural.obreiros.every((o) => mural.includes(o.nome)));
+ok('mostra presenças sobre chamadas', /\d+\/\d+/.test(mural));
+ok('desenha a barra de proporção de cada Irmão',
+  (mural.match(/class="preenche"/g) || []).length === estMural.obreiros.length);
+
+ok('NÃO tem linha de assinatura — é documento de mural',
+  !/assinatura/i.test(mural) && !/Chanceler/.test(mural));
+ok('define página A4', /@page[^}]*A4/.test(mural));
+ok('escapa conteúdo do banco', !/<script/i.test(mural));
+
+console.log('\n== Defeitos encontrados no PDF impresso ==');
+
+/* O separador do cabecalho ia dentro do esc() e chegava ao papel como
+   "&middot;" escrito por extenso, em vez do ponto do meio. */
+for (const [rotulo, doc] of [['lista de presença', html], ['relatório do mural', mural]]) {
+  ok(`${rotulo}: separador não vaza como texto`, !/&amp;middot;/.test(doc));
+  ok(`${rotulo}: cabeçalho traz o separador de verdade`, /&middot;/.test(doc));
+}
+
+/* "Aprendiz" cortado em quatro letras virava "Apre" embaixo da barra. */
+const rotulosGrafico = [...mural.matchAll(/font-size="9" fill="#8098A0">([^<]*)</g)].map((m) => m[1]);
+ok('grau abreviado, não cortado',
+  !rotulosGrafico.some((r) => /^(Apre|Comp|Mest)$/.test(r)),
+  rotulosGrafico.join(' | '));
+
+/* Nome do Irmao em uma linha so: a coluna cedia largura de menos. */
+ok('a coluna do nome não deixa quebrar', /td\.nome[^}]*white-space:\s*nowrap/.test(mural));
+const larguras = ['pos', 'grau', 'barra', 'pct', 'conta']
+  .map((c) => Number((mural.match(new RegExp('td\\.' + c + '[^}]*width:\\s*(\\d+)px')) || [])[1]));
+const sobraNome = 688 - larguras.reduce((a, b) => a + b, 0);
+ok('sobra largura para o nome do Irmão', sobraNome > 300, sobraNome + 'px para a coluna Obreiro');
+
+/* O grafico sozinho, sem dados, nao pode quebrar */
+ok('gráfico vazio não quebra', pdf.graficoSvg([]) === '');
+ok('gráfico com uma sessão só funciona',
+  /<svg/.test(pdf.graficoSvg([{ data: '2026-08-10', percentual: 60, presentes: 3, grau: 'Mestre' }])));
 
 /* ------------------------------------------------------------------ */
 

@@ -111,136 +111,6 @@ App.views.config = {
       ])
     ]);
 
-    /* --------- Checklist do disparo --------- */
-    const boxCheck = el('div');
-
-    async function pintarCheck() {
-      const d = await tentar(window.api.rotina.diagnostico()) || { itens: [] };
-      boxCheck.innerHTML = '';
-
-      boxCheck.appendChild(el('div', {
-        class: d.pronto ? 'aviso info' : 'aviso',
-        style: 'font-size:13px',
-        text: d.resumo || ''
-      }));
-
-      const tbody = el('tbody');
-      for (const i of d.itens) {
-        tbody.appendChild(el('tr', {}, [
-          el('td', {
-            style: `width:34px;font-size:16px;color:${i.ok ? 'var(--c-ok)' : 'var(--c-erro)'}`,
-            text: i.ok ? '✓' : '✗'
-          }),
-          el('td', { style: 'font-weight:600;width:250px', text: i.rotulo }),
-          el('td', {}, [
-            el('div', { text: i.valor }),
-            i.dica ? el('small', { style: 'color:var(--c-erro)', text: i.dica }) : null
-          ])
-        ]));
-      }
-      boxCheck.appendChild(el('table', {}, [tbody]));
-    }
-
-    const cardCheck = el('div', { class: 'cartao' }, [
-      el('h3', { text: 'O disparo automático vai funcionar? — verificação item a item' }),
-      boxCheck,
-      el('div', { class: 'linha compacta', style: 'margin-top:12px' }, [
-        el('button', { class: 'btn secundario', text: '🔄 Verificar novamente', onclick: () => pintarCheck() })
-      ])
-    ]);
-
-    /* --------- Situação da rotina --------- */
-    const boxRotina = el('div');
-    const cardRotina = el('div', { class: 'cartao' }, [
-      el('h3', { text: 'Situação da rotina de disparo' }),
-      boxRotina,
-      el('div', { class: 'linha compacta', style: 'margin-top:12px' }, [
-        el('button', { class: 'btn secundario', text: '🔄 Atualizar', onclick: () => pintarRotina() }),
-        el('button', {
-          class: 'btn secundario', text: '📋 Ver registro da rotina',
-          onclick: async () => {
-            const r = await tentar(window.api.rotina.log(300), 'Falha ao ler o registro');
-            if (!r) return;
-            Modal.abrir({
-              titulo: 'Registro da rotina de disparo',
-              largura: '900px',
-              corpo: el('div', {}, [
-                el('p', { style: 'font-size:12px;color:var(--c-texto-suave);margin:0 0 8px', text: r.arquivo || '' }),
-                el('pre', {
-                  style: 'white-space:pre-wrap;font-size:12px;line-height:1.5;max-height:60vh;overflow:auto;'
-                    + 'background:#F7FCFC;border:1px solid var(--c-borda);border-radius:8px;padding:10px;margin:0',
-                  text: r.linhas.length ? r.linhas.join('\n') : '(sem registros ainda)'
-                })
-              ]),
-              botoes: [{ texto: 'Fechar', classe: 'secundario' }]
-            });
-          }
-        }),
-        el('button', {
-          class: 'btn secundario', text: '🔎 Verificar pendência',
-          onclick: async () => {
-            const r = await tentar(window.api.rotina.verificar(), 'Falha na verificação');
-            if (r && !r.executou) toast(`Rotina não disparou: ${r.motivo}`, '', 8000);
-            else if (r) toast('Rotina executada.', 'ok');
-            pintarRotina();
-          }
-        }),
-        el('button', {
-          class: 'btn', text: '▶ Executar rotina agora',
-          onclick: async () => {
-            const r = await tentar(window.api.rotina.executar(false), 'Falha ao executar a rotina');
-            if (r) toast('Rotina executada. Veja o resultado abaixo.', 'ok');
-            pintarRotina();
-          }
-        }),
-        el('button', {
-          class: 'btn perigo', text: '⚠ Forçar disparo (mesmo já enviado)',
-          onclick: async () => {
-            if (!await confirmar('Isto envia as mensagens de hoje AGORA, ignorando o registro de disparo. Pode duplicar mensagens no grupo. Confirma?')) return;
-            const r = await tentar(window.api.rotina.executar(true), 'Falha ao forçar o disparo');
-            if (r) toast('Disparo forçado executado.', 'ok');
-            pintarRotina();
-          }
-        })
-      ])
-    ]);
-
-    async function pintarRotina() {
-      const e = await tentar(window.api.rotina.estado()) || {};
-      const sim = (v) => (v ? 'sim' : 'não');
-      const rotuloModo = { revisao: 'Automático com revisão prévia', automatico: '100% automático', manual: 'Somente manual' }[e.modo] || e.modo;
-
-      const linhas = [
-        ['Modo atual', rotuloModo],
-        ['Próxima execução', e.proxima_descricao || '—'],
-        ['Expressão do agendador', e.expressao || '—'],
-        ['Hoje é dia habilitado', sim(e.hoje_habilitado)],
-        ['Horário de hoje já passou', sim(e.horario_ja_passou)],
-        ['Já disparado hoje', sim(e.ja_disparado_hoje)],
-        ['Aguardando conexão do WhatsApp', sim(e.adiado_por_whatsapp)],
-        ['Última execução', e.ultima_execucao || '—'],
-        ['Último resultado', e.ultimo_resultado || '—']
-      ];
-
-      const tbody = el('tbody');
-      for (const [k, v] of linhas) {
-        tbody.appendChild(el('tr', {}, [
-          el('td', { style: 'font-weight:600;width:250px', text: k }),
-          el('td', { text: v })
-        ]));
-      }
-
-      boxRotina.innerHTML = '';
-      boxRotina.appendChild(el('table', {}, [tbody]));
-
-      if (e.modo === 'automatico' && App.waStatus.estado !== 'pronto') {
-        boxRotina.appendChild(el('div', {
-          class: 'aviso', style: 'margin-top:10px',
-          html: 'O modo <strong>100% automático</strong> exige o WhatsApp conectado. '
-            + 'O aplicativo precisa ficar aberto no horário do disparo.'
-        }));
-      }
-    }
 
     const cardEventos = el('div', { class: 'cartao' }, [
       el('h3', { text: 'Tipos de evento habilitados para envio' }),
@@ -378,12 +248,25 @@ App.views.config = {
       boxPublicacao.innerHTML = '';
       if (!e) return;
 
+      const escolherPasta = async () => {
+        const r = await tentar(window.api.publicacao.escolherPasta(), 'Falha ao escolher a pasta');
+        if (r && !r.cancelado) {
+          toast('Pasta do projeto definida.', 'ok');
+          pintarPublicacao();
+        }
+      };
+
       if (!e.disponivel) {
         boxPublicacao.appendChild(el('div', {
           class: 'aviso',
-          text: 'Esta instalação não traz a pasta do aplicativo do celular. '
-            + 'A publicação é feita no computador onde o projeto CtrLoja é mantido.'
+          html: 'Falta apontar <strong>onde fica o projeto CtrLoja</strong> neste computador — '
+            + 'a pasta que contém, dentro dela, a subpasta <code>mobile</code>. '
+            + 'Normalmente é a cópia do repositório.'
+            + (e.escolhida ? '<br><br>A pasta guardada não serve mais: <code>' + esc(e.escolhida) + '</code>' : '')
         }));
+        boxPublicacao.appendChild(el('div', { class: 'linha compacta' }, [
+          el('button', { class: 'btn', text: '📂 Escolher a pasta do projeto', onclick: escolherPasta })
+        ]));
         return;
       }
 
@@ -409,6 +292,9 @@ App.views.config = {
         html: 'Publica em <code>' + esc(e.pasta) + '</code>'
       }));
 
+      // O convite usa o mesmo endereço guardado na configuração
+      if (e.endereco && !campoEndereco.value) campoEndereco.value = e.endereco;
+
       if (!e.temGit) {
         boxPublicacao.appendChild(el('div', {
           class: 'aviso', style: 'font-size:12.5px',
@@ -423,7 +309,8 @@ App.views.config = {
         el('button', {
           class: 'btn secundario', text: '📂 Abrir a pasta publicada',
           onclick: () => window.api.app.abrirPasta(e.pasta)
-        })
+        }),
+        el('button', { class: 'btn secundario', text: '🔀 Trocar a pasta do projeto', onclick: escolherPasta })
       ]));
     }
 
@@ -519,6 +406,74 @@ App.views.config = {
       });
     }
 
+    /* --------- Convite para os Irmãos --------- */
+    /*
+       Não existe programa que se mande ao celular e instale o atalho
+       sozinho. O que resolve é o QR Code: o Irmão aponta a câmera e o
+       próprio navegador oferece instalar.
+    */
+    const campoEndereco = el('input', {
+      type: 'text', placeholder: 'https://…',
+      style: 'font-family:Consolas,monospace;font-size:12.5px'
+    });
+
+    const cardConvite = el('div', { class: 'cartao' }, [
+      el('h3', { text: 'Convidar os Irmãos para instalar no celular' }),
+      el('p', {
+        style: 'font-size:12.5px;color:var(--c-texto-suave);line-height:1.6;margin-top:0',
+        text: 'A folha traz um QR Code grande: o Irmão aponta a câmera, o navegador abre e '
+          + 'oferece instalar o aplicativo. Leve impressa à sessão, ou mande o convite pelo grupo.'
+      }),
+      el('label', { class: 'campo' }, [
+        el('span', { text: 'Endereço do aplicativo publicado' }),
+        campoEndereco,
+        el('small', {
+          style: 'color:var(--c-texto-suave);font-size:11px',
+          text: 'Precisa ser https:// — sem conexão segura o navegador não libera a criptografia.'
+        })
+      ]),
+      el('div', { class: 'linha compacta' }, [
+        el('button', {
+          class: 'btn', text: '🖨 Folha de instalação (PDF)',
+          onclick: async () => {
+            const s = await tentar(window.api.publicacao.salvarEndereco(campoEndereco.value), 'Endereço inválido');
+            if (!s) return;
+            const r = await tentar(window.api.publicacao.convitePdf(), 'Falha ao gerar a folha');
+            if (r && !r.cancelado) toast(`Folha salva em ${r.arquivo}`, 'ok', 8000);
+          }
+        }),
+        el('button', {
+          class: 'btn secundario', text: '💬 Copiar convite para o WhatsApp',
+          onclick: async () => {
+            const s = await tentar(window.api.publicacao.salvarEndereco(campoEndereco.value), 'Endereço inválido');
+            if (!s) return;
+            const r = await tentar(window.api.publicacao.conviteTexto(), 'Falha ao montar o convite');
+            if (!r) return;
+            try {
+              await navigator.clipboard.writeText(r.texto);
+              toast('Convite copiado. Cole no grupo da Loja.', 'ok', 6000);
+            } catch (err) {
+              Modal.abrir({
+                titulo: 'Convite para o grupo da Loja',
+                largura: '640px',
+                corpo: el('pre', {
+                  style: 'white-space:pre-wrap;font-size:13px;line-height:1.5;background:#F7FCFC;'
+                    + 'border:1px solid var(--c-borda);border-radius:8px;padding:12px;margin:0',
+                  text: r.texto
+                }),
+                botoes: [{ texto: 'Fechar', classe: 'secundario' }]
+              });
+            }
+          }
+        })
+      ]),
+      el('div', {
+        class: 'aviso info', style: 'margin-top:12px;font-size:12.5px',
+        html: 'A <strong>senha da Loja não vai</strong> na folha nem no convite — ela é combinada '
+          + 'de viva voz em sessão. Mandá-la junto do endereço anularia a razão de o pacote ser cifrado.'
+      })
+    ]);
+
     const cardPublicacao = el('div', { class: 'cartao' }, [
       el('h3', { text: 'Publicar para o aplicativo do celular' }),
       el('p', {
@@ -557,13 +512,10 @@ App.views.config = {
 
     alvo.innerHTML = '';
     alvo.appendChild(form);
-    alvo.appendChild(cardCheck);
-    alvo.appendChild(cardRotina);
     alvo.appendChild(cardCargos);
     alvo.appendChild(cardPublicacao);
+    alvo.appendChild(cardConvite);
     alvo.appendChild(cardBanco);
-    await pintarCheck();
-    await pintarRotina();
     await pintarCargos();
     await pintarPublicacao();
 
@@ -582,8 +534,6 @@ App.views.config = {
         alterado = false;
         marcarPendencia();
         toast('Configurações salvas.', 'ok');
-        pintarRotina();
-        pintarCheck();
       }
     }
 

@@ -112,6 +112,17 @@ REM ------------------------------------------------------------------
 REM  5. Testes automatizados
 REM ------------------------------------------------------------------
 echo [5/7] Executando os testes automatizados...
+REM  Testes de tela usam o jsdom: de unidade de rede o carregamento
+REM  leva minutos. Fora do disco C: eles se declaram pulados.
+if /i not "%~d0"=="C:" set "CTRLOJA_SEM_JSDOM=1"
+
+call node --no-warnings test\teste-driver.js >nul 2>&1
+if errorlevel 1 (
+  echo [ERRO] O driver do banco nao esta entregando as linhas como o
+  echo        programa espera. Build interrompido.
+  echo        Rode "rodar.bat testes" para ver os detalhes.
+  goto :FALHA
+)
 call node test\teste-calendario.js >nul 2>&1
 if errorlevel 1 (
   echo [ERRO] Testes do calendario falharam. Build interrompido.
@@ -163,6 +174,18 @@ if errorlevel 1 (
 call node --no-warnings test\teste-publicacao.js >nul 2>&1
 if errorlevel 1 (
   echo [ERRO] Testes da publicacao falharam. Build interrompido.
+  echo        Rode "rodar.bat testes" para ver os detalhes.
+  goto :FALHA
+)
+call node --no-warnings test\teste-convite.js >nul 2>&1
+if errorlevel 1 (
+  echo [ERRO] Testes do convite falharam. Build interrompido.
+  echo        Rode "rodar.bat testes" para ver os detalhes.
+  goto :FALHA
+)
+call node --no-warnings test\teste-telas-pc.js >nul 2>&1
+if errorlevel 1 (
+  echo [ERRO] Testes das telas do computador falharam. Build interrompido.
   echo        Rode "rodar.bat testes" para ver os detalhes.
   goto :FALHA
 )

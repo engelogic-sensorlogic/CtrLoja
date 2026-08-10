@@ -64,7 +64,12 @@ contextBridge.exposeInMainWorld('api', {
   publicacao: {
     estado: () => call('publicacao:estado'),
     publicar: (senha) => call('publicacao:publicar', senha),
-    abrirGithub: () => call('publicacao:abrir-github')
+    abrirGithub: () => call('publicacao:abrir-github'),
+    escolherPasta: () => call('publicacao:escolher-pasta'),
+    esquecerPasta: () => call('publicacao:esquecer-pasta'),
+    salvarEndereco: (e) => call('publicacao:salvar-endereco', e),
+    conviteTexto: () => call('publicacao:convite-texto'),
+    convitePdf: () => call('publicacao:convite-pdf')
   },
 
   cargos: {
@@ -80,7 +85,8 @@ contextBridge.exposeInMainWorld('api', {
     salvar: (reg) => call('presenca:salvar', reg),
     limpar: (data) => call('presenca:limpar', data),
     lerPacote: (origem, conteudo) => call('presenca:ler-pacote', origem, conteudo),
-    exportarPdf: (data) => call('presenca:exportar-pdf', data)
+    exportarPdf: (data) => call('presenca:exportar-pdf', data),
+    exportarPdfFrequencia: (filtro) => call('presenca:exportar-pdf-frequencia', filtro)
   },
 
   rotina: {
