@@ -27,7 +27,7 @@
 
   // Aparece na aba Dados. Serve para conferir, de olho, se o aparelho
   // esta mesmo com a ultima versao publicada do aplicativo.
-  const VERSAO_APP = '2026.08.09-5';
+  const VERSAO_APP = '2026.08.10-6';
 
   const CHAVE = 'ctrloja.pacote';
   const CHAVE_VERSAO = 'ctrloja.versao';
@@ -190,11 +190,9 @@
     return destravados().has(chaveArea);
   }
 
-  function trancar(chaveArea) {
-    const c = destravados();
-    c.delete(chaveArea);
-    gravarDestravados(c);
-  }
+  /* Não há botão de trancar: o destravamento vive no sessionStorage e
+     morre quando o aplicativo é fechado. Um botão a mais na tela de
+     consulta, para algo que já acontece sozinho, era ruído. */
 
   /* ---------------- dados ---------------- */
 
@@ -636,6 +634,7 @@
 
   function telaPresencaPublica() {
     const caixa = el('div');
+    caixa.appendChild(botaoSincronizar());
     const est = app.nucleo.presenca.estatisticas({});
 
     if (!est.total_sessoes) {
@@ -1373,6 +1372,7 @@
 
   function telaFinancasPublicas() {
     const caixa = el('div');
+    caixa.appendChild(botaoSincronizar());
     caixa.appendChild(el('div', {
       class: 'aviso info',
       text: 'Situação financeira da Loja, como prestada em sessão. '
@@ -1475,6 +1475,23 @@
 
   /* --- Dados --- */
 
+  /*
+     Botão de atualizar solto nas telas de consulta do Início.
+
+     Sem ele, o Irmão que quisesse ver o número mais recente teria de
+     sair para a aba Dados, sincronizar e voltar — três toques para uma
+     coisa que é uma só.
+  */
+  function botaoSincronizar(rotulo) {
+    return el('button', {
+      class: 'btn secundario largo',
+      style: 'margin-bottom:12px',
+      text: app.sincronizando ? 'Buscando…' : (rotulo || '🔄 Buscar atualizações'),
+      disabled: app.sincronizando,
+      onclick: () => sincronizar(false)
+    });
+  }
+
   function telaDados() {
     const caixa = el('div');
     const r = app.banco.resumo;
@@ -1497,32 +1514,19 @@
           ? `Você está na versão ${v.versao}, publicada em ${new Date(v.gerado_em).toLocaleString('pt-BR')}.`
           : 'Ainda não sincronizou com o repositório da Loja.'
       }),
+      /*
+         Só o Buscar atualizações.
+
+         O carregamento de arquivo .ctrloja existia para quando ainda
+         não havia sincronização; hoje é caminho paralelo, que confunde
+         o Irmão e permite um aparelho ficar com dados que ninguém sabe
+         de onde vieram. Quem precisa dele tem o computador.
+      */
       el('button', {
         class: 'btn largo', text: app.sincronizando ? 'Sincronizando…' : '🔄 Buscar atualizações',
         disabled: app.sincronizando, onclick: () => sincronizar(false)
-      }),
-      el('div', { style: 'height:8px' }),
-      el('button', {
-        class: 'btn secundario largo', text: '📂 Carregar arquivo .ctrloja',
-        onclick: () => $('#arquivo').click()
       })
     ]));
-
-    /* Trancas em uso nesta sessão */
-    const abertos = [...destravados()].filter((c) => CtrLojaCargos.obter(c).chave === c);
-    if (abertos.length) {
-      caixa.appendChild(el('div', { class: 'cartao' }, [
-        el('h2', { text: 'Cargos destravados agora' }),
-        el('p', {
-          style: 'font-size:13px;color:var(--c-texto-suave);line-height:1.5;margin-top:0',
-          text: 'O destravamento vale enquanto o aplicativo estiver aberto.'
-        }),
-        el('div', { class: 'linha-botoes' }, abertos.map((c) => el('button', {
-          class: 'btn secundario', text: '🔒 Trancar ' + CtrLojaCargos.obter(c).nome,
-          onclick: () => { trancar(c); aviso(CtrLojaCargos.obter(c).nome + ' trancada.', 'ok'); pintar(); }
-        })))
-      ]));
-    }
 
     caixa.appendChild(el('div', { class: 'cartao' }, [
       el('h2', { text: 'Versão do aplicativo' }),

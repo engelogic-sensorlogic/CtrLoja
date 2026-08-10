@@ -176,6 +176,29 @@ for (const fora of ['grupos', 'envios_log', 'controle_disparo']) delete pacote.d
     versoes.every((v) => v === versaoApp),
     [...new Set(versoes)].join(' | ') + '  vs  ' + versaoApp);
 
+  /* ---- a aba Dados do Início é de consulta, não de manobra ---- */
+
+  console.log('\n== Aba Dados do Início ==');
+
+  // Comentários fora: senão a própria explicação conta como código.
+  const codigoApp = fonteApp.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const blocoDados = codigoApp.slice(
+    codigoApp.indexOf('function telaDados'),
+    codigoApp.indexOf('function telaTrancada')
+  );
+
+  const SECOES = ['Dados carregados neste celular', 'Sincronizar com a Loja',
+    'Versão do aplicativo', 'Privacidade'];
+  ok('as quatro seções, nesta ordem',
+    SECOES.map((s) => blocoDados.indexOf(s)).every((p, i, a) => p > 0 && (i === 0 || p > a[i - 1])),
+    SECOES.join(' · '));
+
+  ok('um único botão de sincronizar',
+    (blocoDados.match(/Buscar atualizações/g) || []).length === 1,
+    String((blocoDados.match(/Buscar atualizações/g) || []).length));
+  ok('sem carregamento de arquivo à mão', !/Carregar arquivo/.test(blocoDados));
+  ok('sem o cartão de cargos destravados', !/Cargos destravados/.test(blocoDados));
+
   console.log('\n== Abertura ==');
   ok('dados guardados foram carregados', !!janela.document.querySelector('#cargos').children.length);
   ok('cabeçalho traz o nome da Loja',
@@ -189,8 +212,8 @@ for (const fora of ['grupos', 'envios_log', 'controle_disparo']) delete pacote.d
   /* ---- Início: só leitura ---- */
 
   console.log('\n== Início: aberto a todos, somente leitura ==');
-  ok('abas de Início: Hoje, Próximos, Presença e Dados',
-    abas().join() === 'Hoje,Próximos,Presença,Dados', abas().join(' | '));
+  ok('abas de Início: Hoje, Próximos, Presença, Finanças e Dados',
+    abas().join() === 'Hoje,Próximos,Presença,Finanças,Dados', abas().join(' | '));
 
   // Vai para o dia da sessão
   doc.querySelector('#conteudo input[type=date]').value = '2026-08-10';
@@ -306,6 +329,22 @@ for (const fora of ['grupos', 'envios_log', 'controle_disparo']) delete pacote.d
   ok('relatório NÃO permite marcar presença',
     !doc.querySelector('#conteudo input[type=checkbox]'));
   ok('relatório não oferece envio', !botoes().some((b) => /Enviar|WhatsApp/i.test(b)));
+
+  /* Atualizar sem sair da tela: o Irmão não deve ter de ir até Dados,
+     sincronizar e voltar para ver o número mais recente. */
+  ok('Presença traz o Buscar atualizações', botoes().some((b) => /Buscar atualizações/.test(b)),
+    botoes().join(' | '));
+
+  clicarAba('Finanças');
+  await new Promise((r) => setTimeout(r, 80));
+  ok('Finanças traz o Buscar atualizações', botoes().some((b) => /Buscar atualizações/.test(b)));
+  ok('Finanças separa Tesouraria e Hospitalaria',
+    /Tesouraria/.test(texto()) && /Hospitalaria/.test(texto()));
+  ok('Finanças não permite lançar', !doc.querySelector('#conteudo select'));
+
+  clicarAba('Hoje');
+  await new Promise((r) => setTimeout(r, 60));
+  ok('Hoje segue sem o botão de atualizar', !botoes().some((b) => /Buscar atualizações/.test(b)));
   };
 
   clicarAba('Solicitar');
