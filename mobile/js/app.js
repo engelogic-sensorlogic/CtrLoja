@@ -1544,7 +1544,16 @@
               for (const c of chaves) await caches.delete(c);
             }
             aviso('Cache limpo. Recarregando…', 'ok');
-            setTimeout(() => location.reload(true), 900);
+            /*
+               location.reload(true) nao serve mais: o argumento foi
+               abandonado pelos navegadores e a pagina volta do cache
+               do mesmo jeito. Recarregar por um endereco novo obriga
+               a buscar tudo de novo, que e o que se quer aqui.
+            */
+            setTimeout(() => {
+              const base = location.href.split('?')[0].split('#')[0];
+              location.replace(base + '?atualizado=' + Date.now());
+            }, 900);
           } catch (err) {
             aviso('Não foi possível limpar: ' + err.message, 'erro');
           }

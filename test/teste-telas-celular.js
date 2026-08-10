@@ -150,7 +150,33 @@ for (const fora of ['grupos', 'envios_log', 'controle_disparo']) delete pacote.d
   const clicarArea = (nome) => clicar([...doc.querySelectorAll('#cargos .cargo')].find((b) => b.textContent.includes(nome)));
   const clicarAba = (nome) => clicar([...doc.querySelectorAll('#abas .aba')].find((b) => b.textContent.trim() === nome));
 
-  console.log('== Abertura ==');
+  /* ---- versão nos endereços dos arquivos ---- */
+  /*
+     Sem o ?v= o navegador guarda js/app.js pelo endereço e continua
+     servindo a cópia velha depois de publicada a nova: o aplicativo
+     abre com telas antigas sobre dados novos, sem erro nenhum. E se o
+     número no index.html ficar para trás do VERSAO_APP, o efeito é o
+     mesmo. Estas duas verificações são o que impede a repetição.
+  */
+  console.log('== Versão nos endereços dos arquivos ==');
+
+  const html = fs.readFileSync(path.join(RAIZ, 'mobile', 'index.html'), 'utf8');
+  const fonteApp = fs.readFileSync(path.join(RAIZ, 'mobile', 'js', 'app.js'), 'utf8');
+  const versaoApp = (fonteApp.match(/VERSAO_APP\s*=\s*'([^']+)'/) || [])[1];
+
+  ok('o aplicativo declara uma versão', !!versaoApp, versaoApp);
+
+  const referencias = [...html.matchAll(/(?:src|href)="((?:js|css)\/[^"]+)"/g)].map((m) => m[1]);
+  ok('todos os arquivos próprios levam ?v=',
+    referencias.length > 0 && referencias.every((r) => r.indexOf('?v=') > 0),
+    referencias.filter((r) => r.indexOf('?v=') < 0).join(', ') || 'todos');
+
+  const versoes = referencias.map((r) => r.split('?v=')[1]);
+  ok('a versão nos endereços é a mesma do aplicativo',
+    versoes.every((v) => v === versaoApp),
+    [...new Set(versoes)].join(' | ') + '  vs  ' + versaoApp);
+
+  console.log('\n== Abertura ==');
   ok('dados guardados foram carregados', !!janela.document.querySelector('#cargos').children.length);
   ok('cabeçalho traz o nome da Loja',
     /Rolandense|CtrLoja/.test(doc.querySelector('#tituloLoja').textContent),
