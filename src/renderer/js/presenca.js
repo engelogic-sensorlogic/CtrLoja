@@ -19,6 +19,10 @@
 const MESES_PRESENCA = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
   'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 
+/* Piso da chamada. Repetido aqui porque o renderizador não enxerga os
+   módulos do processo principal; o teste confere que os dois batem. */
+const DATA_MINIMA = '2026-01-01';
+
 function dataExtensoPresenca(iso) {
   if (!iso) return '';
   const [a, m, d] = String(iso).split('-').map(Number);
@@ -84,6 +88,14 @@ App.views.presenca = {
       }
 
       const sel = el('select', { style: 'max-width:420px' });
+      // A data em uso pode não estar na lista: chamada sendo lançada
+      // agora numa data sem sessão cadastrada.
+      if (dataAtual && !sessoes.some((s) => s.data === dataAtual)) {
+        sel.appendChild(el('option', {
+          value: dataAtual, selected: true,
+          text: `${dataAtual.slice(8, 10)}/${dataAtual.slice(5, 7)}/${dataAtual.slice(0, 4)} — data escolhida`
+        }));
+      }
       for (const s of sessoes) {
         sel.appendChild(el('option', {
           value: s.data,
@@ -94,15 +106,46 @@ App.views.presenca = {
       }
       sel.addEventListener('change', () => { dataAtual = sel.value; carregar(); });
 
-      card.appendChild(el('label', { class: 'campo' }, [el('span', { text: 'Sessão' }), sel]));
+      /* Seletor de data ao lado da lista: recuperar chamada antiga sem
+         rolar a lista inteira até achar a sessão. */
+      const porData = el('input', {
+        type: 'date', value: dataAtual || '', min: DATA_MINIMA, style: 'max-width:200px'
+      });
+      porData.addEventListener('change', () => {
+        if (!porData.value) return;
+        if (porData.value < DATA_MINIMA) {
+          toast('A chamada só aceita datas a partir de ' + DATA_MINIMA.split('-').reverse().join('/') + '.', 'erro', 7000);
+          porData.value = dataAtual;
+          return;
+        }
+        dataAtual = porData.value;
+        carregar();
+      });
+
+      card.appendChild(el('div', { class: 'linha' }, [
+        el('label', { class: 'campo' }, [el('span', { text: 'Sessão programada' }), sel]),
+        el('label', { class: 'campo' }, [
+          el('span', { text: 'ou escolha a data' }), porData,
+          el('small', {
+            style: 'color:var(--c-texto-suave);font-size:11px',
+            text: 'A partir de ' + DATA_MINIMA.split('-').reverse().join('/')
+          })
+        ])
+      ]));
 
       if (!lista) return card;
 
       card.appendChild(el('div', { class: 'aviso info', style: 'margin-top:4px' }, [
         el('div', {
-          html: `<strong>${esc(dataExtensoPresenca(lista.data))}</strong> — ${esc(lista.rotulo || 'sessão sem grau definido')}`
+          html: `<strong>${esc(dataExtensoPresenca(lista.data))}</strong> — `
+            + esc(lista.rotulo || 'sem sessão cadastrada nesta data')
             + (lista.tem_chamada ? '' : ' &middot; <em>chamada ainda não registrada</em>')
-        })
+        }),
+        lista.sem_sessao ? el('div', {
+          style: 'font-size:12.5px;margin-top:4px',
+          text: 'Não há sessão programada nesta data — a chamada será gravada assim mesmo, '
+            + 'e a data passa a aparecer na lista acima.'
+        }) : null
       ]));
 
       /* --- marcação --- */

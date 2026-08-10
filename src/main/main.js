@@ -338,6 +338,12 @@ handle('presenca:estatisticas', (filtro) => presenca.estatisticas(filtro || {}))
 handle('presenca:historico-obreiro', (id, filtro) => presenca.historicoDoObreiro(id, filtro || {}));
 
 handle('presenca:salvar', (reg) => {
+  if (!presenca.dataValidaParaChamada(reg && reg.sessao_data)) {
+    throw new Error(
+      'A chamada só aceita datas a partir de '
+      + presenca.DATA_MINIMA.split('-').reverse().join('/') + '.'
+    );
+  }
   const r = db.presencas.registrarLista(Object.assign({ origem: 'pc' }, reg));
   return Object.assign(r, { lista: presenca.listaDaSessao(reg.sessao_data) });
 });

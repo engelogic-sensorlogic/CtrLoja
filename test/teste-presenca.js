@@ -77,6 +77,29 @@ ok('Adormecido fora da chamada', !lista.itens.some((i) => i.obreiro_id === dormi
 ok('ninguém marcado antes da chamada', lista.presentes === 0 && lista.tem_chamada === false);
 ok('hora da sessão veio junto', lista.hora === '20:00');
 
+console.log('\n== Datas liberadas para chamada ==');
+
+ok('piso em janeiro de 2026', presenca.DATA_MINIMA === '2026-01-01', presenca.DATA_MINIMA);
+ok('aceita o próprio piso', presenca.dataValidaParaChamada('2026-01-01'));
+ok('aceita data de recuperação', presenca.dataValidaParaChamada('2026-03-16'));
+ok('recusa data anterior ao piso', !presenca.dataValidaParaChamada('2025-12-31'));
+ok('recusa ano digitado errado', !presenca.dataValidaParaChamada('1926-08-10'));
+ok('recusa data mal formada', !presenca.dataValidaParaChamada('10/08/2026'));
+ok('recusa vazio', !presenca.dataValidaParaChamada('') && !presenca.dataValidaParaChamada(null));
+
+/* Chamada lancada em data sem sessao cadastrada precisa continuar
+   alcancavel pelo seletor - senao o registro some da vista. */
+db.presencas.registrarLista({
+  sessao_data: '2026-02-09', origem: 'pc',
+  itens: [{ obreiro_id: ids[0], presente: true }]
+});
+const avulsa = presenca.sessoesParaChamada(200).find((s) => s.data === '2026-02-09');
+ok('data sem sessão aparece no seletor depois da chamada', !!avulsa);
+ok('e vem marcada como avulsa', avulsa && avulsa.sem_sessao === true && avulsa.tem_chamada === true);
+ok('a lista dessa data monta assim mesmo',
+  presenca.listaDaSessao('2026-02-09').sem_sessao === true);
+db.presencas.limparSessao('2026-02-09');
+
 const paraChamada = presenca.sessoesParaChamada(10);
 ok('sessões listadas da mais recente para a mais antiga',
   paraChamada[0].data === '2026-08-17', paraChamada.map((s) => s.data).join(' '));

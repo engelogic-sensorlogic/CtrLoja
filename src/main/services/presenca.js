@@ -88,6 +88,7 @@ function listaDaSessao(data) {
     data,
     sessao,
     rotulo: rotuloSessao(sessao),
+    sem_sessao: !sessao,
     grau: sessao ? sessao.grau : null,
     tipo: sessao ? (ROTULO_TIPO[sessao.tipo] || sessao.tipo) : null,
     hora: sessao ? sessao.hora : null,
@@ -102,22 +103,61 @@ function listaDaSessao(data) {
   };
 }
 
-/** Sessoes disponiveis para chamada, da mais recente para a mais antiga. */
-function sessoesParaChamada(limite) {
-  const comChamada = new Set(db.presencas.datasComChamada
-    ? db.presencas.datasComChamada()
-    : [...agruparPorSessao().keys()]);
+/*
+ * Data mais antiga em que se admite lancar chamada.
+ *
+ * A Loja esta recuperando o historico de 2026, entao a chamada precisa
+ * aceitar datas para tras - mas nao qualquer uma: sem um piso, um erro
+ * de digitacao no seletor de data criaria registro em 1926 e a
+ * estatistica sairia deformada sem ninguem entender por que.
+ */
+const DATA_MINIMA = '2026-01-01';
 
-  return db.sessoes.listar({ somenteAtivas: true })
-    .map((s) => ({
+const dataValidaParaChamada = (data) =>
+  /^\d{4}-\d{2}-\d{2}$/.test(String(data || '')) && data >= DATA_MINIMA;
+
+/**
+ * Datas disponiveis para chamada, da mais recente para a mais antiga.
+ *
+ * Junta duas origens: as sessoes programadas na Agenda da Loja e as
+ * datas que JA tem chamada registrada. A segunda importa - lancada uma
+ * chamada em data sem sessao cadastrada, aquela data tem de continuar
+ * alcancavel pelo seletor, senao o registro some da vista.
+ */
+function sessoesParaChamada(limite) {
+  const comChamada = db.presencas.datasComChamada
+    ? db.presencas.datasComChamada()
+    : [...agruparPorSessao().keys()];
+
+  const porData = new Map();
+
+  for (const s of db.sessoes.listar({ somenteAtivas: true })) {
+    if (!dataValidaParaChamada(s.data)) continue;
+    porData.set(s.data, {
       data: s.data,
       grau: s.grau,
       tipo: ROTULO_TIPO[s.tipo] || s.tipo,
       rotulo: rotuloSessao(s),
-      tem_chamada: comChamada.has(s.data)
-    }))
+      sem_sessao: false,
+      tem_chamada: comChamada.indexOf(s.data) >= 0
+    });
+  }
+
+  for (const data of comChamada) {
+    if (!dataValidaParaChamada(data) || porData.has(data)) continue;
+    porData.set(data, {
+      data,
+      grau: null,
+      tipo: null,
+      rotulo: 'Chamada avulsa',
+      sem_sessao: true,
+      tem_chamada: true
+    });
+  }
+
+  return [...porData.values()]
     .sort((a, b) => (a.data < b.data ? 1 : (a.data > b.data ? -1 : 0)))
-    .slice(0, limite || 60);
+    .slice(0, limite || 200);
 }
 
 /* ------------------------------------------------------------------ */
@@ -262,6 +302,8 @@ function historicoDoObreiro(obreiroId, filtro) {
 }
 
 module.exports = {
+  DATA_MINIMA,
+  dataValidaParaChamada,
   listaDaSessao,
   sessoesParaChamada,
   comparecimentoPorSessao,

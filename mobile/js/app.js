@@ -27,7 +27,7 @@
 
   // Aparece na aba Dados. Serve para conferir, de olho, se o aparelho
   // esta mesmo com a ultima versao publicada do aplicativo.
-  const VERSAO_APP = '2026.08.10-6';
+  const VERSAO_APP = '2026.08.10-7';
 
   const CHAVE = 'ctrloja.pacote';
   const CHAVE_VERSAO = 'ctrloja.versao';
@@ -723,7 +723,7 @@
       return caixa;
     }
 
-    if (!app.chamadaData || !sessoes.some((s) => s.data === app.chamadaData)) {
+    if (!app.chamadaData) {
       // Abre na sessão mais próxima de hoje, que é quase sempre a de agora
       const hoje = hojeISO();
       const passadas = sessoes.filter((s) => s.data <= hoje);
@@ -731,7 +731,26 @@
       app.chamadaMarcados = null;
     }
 
+    const trocarData = (data) => {
+      if (!app.nucleo.presenca.dataValidaParaChamada(data)) {
+        aviso('A chamada só aceita datas a partir de '
+          + dataExtenso(app.nucleo.presenca.DATA_MINIMA) + '.', 'erro', 7000);
+        return;
+      }
+      app.chamadaData = data;
+      app.chamadaMarcados = null;
+      pintar();
+    };
+
     const seletor = el('select', { class: 'campo-largo' });
+    // A data em uso pode não estar na lista: é o caso de uma chamada
+    // sendo lançada agora numa data sem sessão cadastrada.
+    if (!sessoes.some((s) => s.data === app.chamadaData)) {
+      seletor.appendChild(el('option', {
+        value: app.chamadaData, selected: true,
+        text: `${app.chamadaData.slice(8, 10)}/${app.chamadaData.slice(5, 7)}/${app.chamadaData.slice(0, 4)} — data escolhida`
+      }));
+    }
     for (const s of sessoes) {
       seletor.appendChild(el('option', {
         value: s.data,
@@ -740,11 +759,16 @@
           + (s.tem_chamada ? '  ✓' : '')
       }));
     }
-    seletor.addEventListener('change', () => {
-      app.chamadaData = seletor.value;
-      app.chamadaMarcados = null;
-      pintar();
+    seletor.addEventListener('change', () => trocarData(seletor.value));
+
+    /* Seletor de data: para recuperar chamada antiga sem rolar a lista
+       inteira até achar a sessão. */
+    const porData = el('input', {
+      type: 'date', class: 'campo-largo',
+      value: app.chamadaData,
+      min: app.nucleo.presenca.DATA_MINIMA
     });
+    porData.addEventListener('change', () => { if (porData.value) trocarData(porData.value); });
 
     const lista = app.nucleo.presenca.listaDaSessao(app.chamadaData);
 
@@ -762,11 +786,21 @@
 
     caixa.appendChild(el('div', { class: 'cartao' }, [
       el('h2', { text: 'Lista de Presença' }),
-      el('label', { class: 'campo-mobile' }, [el('span', { text: 'Sessão' }), seletor]),
+      el('label', { class: 'campo-mobile' }, [el('span', { text: 'Sessão programada' }), seletor]),
+      el('label', { class: 'campo-mobile' }, [
+        el('span', { text: 'ou escolha a data' }), porData,
+        el('small', {
+          style: 'display:block;font-size:11px;color:var(--c-texto-suave);margin-top:4px',
+          text: 'A partir de ' + dataExtenso(app.nucleo.presenca.DATA_MINIMA) + '.'
+        })
+      ]),
       el('div', { class: 'sessao-resumo' }, [
         el('div', { text: dataExtenso(app.chamadaData) }),
-        el('strong', { text: lista.rotulo || 'Sessão sem grau definido' }),
-        lista.hora ? el('small', { text: 'Às ' + lista.hora }) : null
+        el('strong', { text: lista.rotulo || 'Sem sessão cadastrada nesta data' }),
+        lista.hora ? el('small', { text: 'Às ' + lista.hora }) : null,
+        lista.sem_sessao
+          ? el('small', { text: 'A chamada será registrada mesmo assim.' })
+          : null
       ]),
       lista.tem_chamada
         ? el('div', { class: 'aviso info', text: 'Esta sessão já tem chamada registrada. Reenviar substitui a anterior.' })

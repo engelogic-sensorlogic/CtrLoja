@@ -97,6 +97,58 @@ const api = {
       melhor: null, pior: null, ultima: null, quadro: 2
     })
   },
+  financeiro: {
+    areas: () => resp([
+      {
+        chave: 'tesouraria', nome: 'Tesouraria',
+        naturezas: [
+          { chave: 'receita', nome: 'Receita', sinal: 1, categorias: ['Mensalidade', 'Outros'] },
+          { chave: 'despesa', nome: 'Despesa', sinal: -1, categorias: ['Ágapes', 'Luz', 'Outros'] },
+          { chave: 'investimento', nome: 'Investimento', sinal: 0, categorias: ['Aplicação'] }
+        ]
+      },
+      {
+        chave: 'hospitalaria', nome: 'Hospitalaria',
+        naturezas: [
+          { chave: 'receita', nome: 'Receita', sinal: 1, categorias: ['Tronco de Solidariedade'] },
+          { chave: 'doacao', nome: 'Doação', sinal: -1, categorias: ['Assistência a Irmão'] }
+        ]
+      }
+    ]),
+    extrato: () => resp({
+      area: 'tesouraria', area_nome: 'Tesouraria', mes: '2026-08', mes_extenso: 'agosto de 2026',
+      naturezas: [
+        {
+          chave: 'receita', nome: 'Receita', sinal: 1, total: 1550.5, quantidade: 1,
+          itens: [{ id: 1, data: '2026-08-05', categoria: 'Mensalidade', descricao: '', valor: 1550.5, origem: 'pc' }],
+          categorias: [{ categoria: 'Mensalidade', total: 1550.5, percentual: 100 }]
+        },
+        {
+          chave: 'despesa', nome: 'Despesa', sinal: -1, total: 600.3, quantidade: 1,
+          itens: [{ id: 2, data: '2026-08-10', categoria: 'Ágapes', descricao: '', valor: 600.3, origem: 'celular' }],
+          categorias: [{ categoria: 'Ágapes', total: 600.3, percentual: 100 }]
+        },
+        { chave: 'investimento', nome: 'Investimento', sinal: 0, total: 0, quantidade: 0, itens: [], categorias: [] }
+      ],
+      total_lancamentos: 2, saldo: 950.2, acumulado: 950.2, investido: 0, tem_lancamento: true
+    }),
+    painel: () => resp({
+      area: 'tesouraria', area_nome: 'Tesouraria',
+      naturezas: [
+        { chave: 'receita', nome: 'Receita', sinal: 1 },
+        { chave: 'despesa', nome: 'Despesa', sinal: -1 },
+        { chave: 'investimento', nome: 'Investimento', sinal: 0 }
+      ],
+      serie: [{ mes: '2026-08', mes_extenso: 'agosto de 2026', receita: 1550.5, despesa: 600.3, investimento: 0, saldo: 950.2, acumulado: 950.2 }],
+      totais: { receita: 1550.5, despesa: 600.3, investimento: 0 },
+      saldo_atual: 950.2, investido: 0, mes: '2026-08', mes_extenso: 'agosto de 2026',
+      saldo_mes: 950.2, categorias: {}, tem_dados: true
+    }),
+    meses: () => resp(['2026-08']),
+    salvar: () => resp({ lancamento: { area: 'tesouraria', data: '2026-08-05' } }),
+    excluir: () => resp({})
+  },
+
   // Retirados da tela de Configuracoes: ninguem mais pode chamar
   rotina: {
     diagnostico: proibido('rotina:diagnostico'),
@@ -120,9 +172,25 @@ janela.api = api;
 // A ordem e a mesma do index.html. O boot.js fica de fora: ele so
 // dispara a navegacao inicial, que aqui nao interessa.
 const ORDEM = ['app', 'dashboard', 'obreiros', 'agenda', 'sessoes', 'presenca',
-  'calendario', 'modelos', 'whatsapp', 'historico', 'config'];
+  'financeiro', 'calendario', 'modelos', 'whatsapp', 'historico', 'config'];
 
-console.log('== Carregamento dos arquivos da interface ==');
+/*
+ * O renderizador não enxerga os módulos do processo principal, então o
+ * piso da chamada aparece escrito nos dois lugares. Número repetido é
+ * número que um dia diverge - e a tela passaria a oferecer datas que o
+ * programa recusa na hora de gravar, sem explicação para o usuário.
+ */
+console.log('== Constantes repetidas entre processos ==');
+
+const pisoServico = (fs.readFileSync(path.join(RAIZ, 'src', 'main', 'services', 'presenca.js'), 'utf8')
+  .match(/DATA_MINIMA\s*=\s*'([^']+)'/) || [])[1];
+const pisoTela = (fs.readFileSync(path.join(RAIZ, 'src', 'renderer', 'js', 'presenca.js'), 'utf8')
+  .match(/DATA_MINIMA\s*=\s*'([^']+)'/) || [])[1];
+
+ok('o serviço declara o piso da chamada', !!pisoServico, pisoServico);
+ok('a tela declara o mesmo piso', pisoServico === pisoTela, `serviço ${pisoServico} · tela ${pisoTela}`);
+
+console.log('\n== Carregamento dos arquivos da interface ==');
 
 const declarados = new Map();
 for (const nome of ORDEM) {
@@ -154,10 +222,11 @@ try {
 const telas = Object.keys(App.views);
 const itensMenu = [...janela.document.querySelectorAll('.nav-item')].map((b) => b.dataset.view);
 
-ok('todas as telas registradas', telas.length === 10, telas.join(', '));
+ok('todas as telas registradas', telas.length === 11, telas.join(', '));
 ok('cada item do menu tem uma tela', itensMenu.every((v) => telas.includes(v)), itensMenu.join(', '));
 ok('cada tela tem um item no menu', telas.every((v) => itensMenu.includes(v)));
 ok('a tela Presença está no menu', itensMenu.includes('presenca'));
+ok('a tela Financeiro está no menu', itensMenu.includes('financeiro'));
 
 /* ------------------------------------------------------------------ */
 
@@ -219,6 +288,28 @@ const montar = async (nome) => {
   ok('uma caixa de marcação por Obreiro',
     alvo.querySelectorAll('input[type=checkbox]').length === 2,
     String(alvo.querySelectorAll('input[type=checkbox]').length));
+
+  /* ---------------- Financeiro ---------------- */
+
+  console.log('\n== Financeiro ==');
+  try {
+    alvo = await montar('financeiro');
+    ok('montou sem erro', true);
+  } catch (err) {
+    ok('montou sem erro', false, err.message);
+  }
+
+  const t3 = alvo.textContent;
+  ok('oferece as duas áreas', /Tesouraria/.test(t3) && /Hospitalaria/.test(t3));
+  ok('traz o formulário de lançamento', /Novo lançamento/.test(t3));
+  ok('mostra o mês por extenso', /agosto de 2026/.test(t3));
+  ok('mostra saldo e acumulado', /Saldo do mês/.test(t3) && /Acumulado/.test(t3));
+  ok('formata em real', /R\$/.test(t3));
+  ok('separa milhar e centavos', /1\.550,50/.test(t3), (t3.match(/R\$ [\d.,]+/g) || []).slice(0, 3).join(' '));
+  ok('marca o que veio do celular', /celular/.test(t3));
+  ok('desenha o gráfico de movimento', !!alvo.querySelector('svg'));
+  ok('as categorias acompanham a natureza escolhida',
+    alvo.querySelectorAll('select').length >= 2);
 
   console.log('\n' + (falhas ? ('FALHAS: ' + falhas) : 'TELAS DO COMPUTADOR VALIDADAS'));
   process.exit(falhas ? 1 : 0);
