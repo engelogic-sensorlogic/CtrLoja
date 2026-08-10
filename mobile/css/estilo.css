@@ -283,6 +283,48 @@ textarea.campo-largo { resize: vertical; line-height: 1.5; }
 .barra-dentro.media { background: var(--c-acento); }
 .barra-dentro.baixa { background: #D98324; }
 
+/* ---------------------- Financeiro ---------------------- */
+
+.mes-atual {
+  flex: 1; text-align: center; font-size: 15px; font-weight: 600;
+  color: var(--c-acento-escuro); text-transform: capitalize;
+}
+
+.saldo {
+  background: var(--c-branco); border: 1px solid var(--c-borda);
+  border-left: 5px solid var(--c-ok); border-radius: var(--raio);
+  padding: 14px; margin-bottom: 12px; text-align: center;
+}
+.saldo.negativo { border-left-color: var(--c-erro); }
+.saldo .rotulo {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .6px;
+  color: var(--c-texto-suave);
+}
+.saldo .valor { font-size: 27px; font-weight: 700; color: var(--c-ok); margin: 3px 0 4px; }
+.saldo.negativo .valor { color: var(--c-erro); }
+.saldo .acumulado { font-size: 12px; color: var(--c-texto-suave); }
+
+.natureza-topo { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.natureza-topo h2 { margin: 0 0 6px; }
+.natureza-total { font-size: 15px; font-weight: 700; color: var(--c-texto-suave); }
+.natureza-total.entrada { color: var(--c-ok); }
+.natureza-total.saida { color: #D98324; }
+
+.legenda-cores {
+  display: flex; flex-wrap: wrap; gap: 14px; justify-content: center;
+  margin-top: 8px; font-size: 11.5px; color: var(--c-texto-suave);
+}
+.legenda-item { display: inline-flex; align-items: center; gap: 5px; }
+.legenda-item i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+
+/* Blocos da tela Início: um por grupo de informação */
+.grupo { margin-bottom: 4px; }
+.grupo-titulo {
+  font-size: 16px; color: var(--c-acento-escuro); margin: 0 0 10px;
+  padding-bottom: 6px; border-bottom: 2px solid var(--c-acento);
+}
+.divisor { border: 0; border-top: 1px dashed var(--c-borda); margin: 22px 0; }
+
 /* ---------------------- Aviso flutuante ---------------------- */
 
 .toasts { position: fixed; left: 12px; right: 12px; bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); z-index: 60; }

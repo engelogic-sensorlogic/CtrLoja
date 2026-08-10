@@ -14,7 +14,7 @@
    publicada; sem internet, usa a última que guardou.
    ================================================================== */
 
-const VERSAO = 'ctrloja-mobile-v4';
+const VERSAO = 'ctrloja-mobile-v5';
 
 const ARQUIVOS = [
   './',
@@ -33,7 +33,9 @@ const ARQUIVOS = [
   '../src/main/services/templates.js',
   '../src/main/services/agenda.js',
   '../src/main/services/presenca.js',
-  '../src/main/services/presenca-pacote.js'
+  '../src/main/services/presenca-pacote.js',
+  '../src/main/services/financeiro.js',
+  '../src/main/services/financeiro-pacote.js'
 ];
 
 self.addEventListener('install', (evento) => {

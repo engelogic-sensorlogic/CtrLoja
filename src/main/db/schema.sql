@@ -140,6 +140,29 @@ CREATE TABLE IF NOT EXISTS presencas (
 CREATE INDEX IF NOT EXISTS idx_presencas_sessao ON presencas(sessao_data);
 CREATE INDEX IF NOT EXISTS idx_presencas_obreiro ON presencas(obreiro_id);
 
+-- Lancamentos financeiros: Tesouraria e Hospitalaria ------------------
+-- Uma tabela so para as duas areas. Elas tem a mesma forma - entra
+-- dinheiro, sai dinheiro, sobra um saldo - e o que muda sao os rotulos:
+-- na Tesouraria sai como Despesa, na Hospitalaria como Doacao. Duas
+-- tabelas iguais seriam duas oportunidades de divergir.
+CREATE TABLE IF NOT EXISTS financeiro (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  area            TEXT    NOT NULL,          -- tesouraria | hospitalaria
+  natureza        TEXT    NOT NULL,          -- receita | despesa | investimento | doacao
+  categoria       TEXT,                      -- Mensalidade, Agapes, Tronco de Solidariedade...
+  descricao       TEXT,
+  valor           REAL    NOT NULL DEFAULT 0,
+  data            TEXT    NOT NULL,          -- YYYY-MM-DD
+  origem          TEXT,                      -- celular | pc
+  registrado_por  TEXT,
+  observacoes     TEXT,
+  ativo           INTEGER DEFAULT 1,
+  criado_em       TEXT    DEFAULT (datetime('now','localtime')),
+  atualizado_em   TEXT    DEFAULT (datetime('now','localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_financeiro_area_data ON financeiro(area, data);
+CREATE INDEX IF NOT EXISTS idx_financeiro_data ON financeiro(data);
+
 -- Controle para evitar disparo duplicado no mesmo dia ------------------
 CREATE TABLE IF NOT EXISTS controle_disparo (
   data_ref        TEXT PRIMARY KEY,

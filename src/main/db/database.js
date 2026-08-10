@@ -570,6 +570,115 @@ const presencas = {
 };
 
 /* ------------------------------------------------------------------ */
+/* Lancamentos financeiros                                             */
+/* ------------------------------------------------------------------ */
+
+const AREAS_FINANCEIRAS = ['tesouraria', 'hospitalaria'];
+const NATUREZAS = ['receita', 'despesa', 'investimento', 'doacao'];
+
+const financeiro = {
+  /** Tudo, para publicar ao celular e para o acumulado. */
+  todos(filtro = {}) {
+    let sql = 'SELECT * FROM financeiro WHERE ativo = 1';
+    const p = [];
+    if (filtro.area) { sql += ' AND area = ?'; p.push(filtro.area); }
+    if (filtro.de) { sql += ' AND data >= ?'; p.push(filtro.de); }
+    if (filtro.ate) { sql += ' AND data <= ?'; p.push(filtro.ate); }
+    sql += ' ORDER BY data, id';
+    return getConn().prepare(sql).all(...p);
+  },
+
+  obter(id) {
+    return getConn().prepare('SELECT * FROM financeiro WHERE id = ?').get(id);
+  },
+
+  /** Meses que tem lancamento, do mais novo para o mais antigo. */
+  mesesComLancamento(area) {
+    let sql = "SELECT DISTINCT substr(data, 1, 7) AS mes FROM financeiro WHERE ativo = 1";
+    const p = [];
+    if (area) { sql += ' AND area = ?'; p.push(area); }
+    sql += ' ORDER BY mes DESC';
+    return getConn().prepare(sql).all(...p).map((l) => l.mes);
+  },
+
+  salvar(reg) {
+    if (!reg || !reg.area || !AREAS_FINANCEIRAS.includes(reg.area)) {
+      throw new Error('Área desconhecida: informe tesouraria ou hospitalaria.');
+    }
+    if (!NATUREZAS.includes(reg.natureza)) {
+      throw new Error('Natureza desconhecida: ' + reg.natureza);
+    }
+    if (!reg.data || !/^\d{4}-\d{2}-\d{2}$/.test(reg.data)) {
+      throw new Error('Informe a data do lançamento.');
+    }
+    const valor = Number(reg.valor);
+    if (!Number.isFinite(valor) || valor < 0) {
+      throw new Error('O valor precisa ser um número igual ou maior que zero.');
+    }
+
+    const dados = {
+      area: reg.area,
+      natureza: reg.natureza,
+      categoria: reg.categoria || null,
+      descricao: reg.descricao || null,
+      // Guardado em centavos arredondados: dinheiro nao sofre com o
+      // arredondamento binario se for tratado com duas casas na entrada.
+      valor: Math.round(valor * 100) / 100,
+      data: reg.data,
+      origem: reg.origem || 'pc',
+      registrado_por: reg.registrado_por || null,
+      observacoes: reg.observacoes || null,
+      ativo: reg.ativo === undefined ? 1 : (reg.ativo ? 1 : 0)
+    };
+
+    /* O id vai separado: a instrucao de INSERT nao o declara, e tanto o
+       node:sqlite quanto o better-sqlite3 recusam parametro nomeado que
+       a instrucao nao espera. */
+    const id = reg.id ? Number(reg.id) : null;
+
+    if (id) {
+      getConn().prepare(`
+        UPDATE financeiro SET
+          area = @area, natureza = @natureza, categoria = @categoria,
+          descricao = @descricao, valor = @valor, data = @data,
+          origem = @origem, registrado_por = @registrado_por,
+          observacoes = @observacoes, ativo = @ativo,
+          atualizado_em = datetime('now','localtime')
+        WHERE id = @id
+      `).run(Object.assign({ id }, dados));
+      return financeiro.obter(id);
+    }
+
+    const r = getConn().prepare(`
+      INSERT INTO financeiro (area, natureza, categoria, descricao, valor, data, origem, registrado_por, observacoes, ativo)
+      VALUES (@area, @natureza, @categoria, @descricao, @valor, @data, @origem, @registrado_por, @observacoes, @ativo)
+    `).run(dados);
+    return financeiro.obter(Number(r.lastInsertRowid));
+  },
+
+  /** Grava vários de uma vez - é assim que chega o pacote do celular. */
+  salvarVarios(lista, extras) {
+    const itens = Array.isArray(lista) ? lista : [];
+    if (!itens.length) throw new Error('Nenhum lançamento informado.');
+
+    let gravados = 0;
+    const tx = getConn().transaction(() => {
+      for (const i of itens) {
+        financeiro.salvar(Object.assign({}, i, extras || {}));
+        gravados++;
+      }
+    });
+    tx();
+    return { gravados };
+  },
+
+  excluir(id) {
+    getConn().prepare('DELETE FROM financeiro WHERE id = ?').run(id);
+    return true;
+  }
+};
+
+/* ------------------------------------------------------------------ */
 /* Grupos do WhatsApp                                                  */
 /* ------------------------------------------------------------------ */
 
@@ -651,6 +760,6 @@ const envios = {
 
 module.exports = {
   init, getConn, getPath,
-  config, obreiros, familiares, datas, templates, sessoes, presencas, grupos, envios,
-  CONFIG_PADRAO, GRAUS_SESSAO, TIPOS_SESSAO
+  config, obreiros, familiares, datas, templates, sessoes, presencas, financeiro, grupos, envios,
+  CONFIG_PADRAO, GRAUS_SESSAO, TIPOS_SESSAO, AREAS_FINANCEIRAS, NATUREZAS
 };

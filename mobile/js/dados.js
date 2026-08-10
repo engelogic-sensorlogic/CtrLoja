@@ -178,6 +178,37 @@
       limparSessao() { /* somente leitura */ }
     };
 
+    /* Mesma ordenacao do SQLite (ORDER BY data, id) para que o extrato
+       saia igual nos dois lados, centavo por centavo. */
+    const financeiro = {
+      todos(filtro) {
+        filtro = filtro || {};
+        let lista = tabela('financeiro').filter((l) => verdadeiro(l.ativo));
+        if (filtro.area) lista = lista.filter((l) => l.area === filtro.area);
+        if (filtro.de) lista = lista.filter((l) => l.data >= filtro.de);
+        if (filtro.ate) lista = lista.filter((l) => l.data <= filtro.ate);
+        return lista.sort((a, b) => bin(a.data, b.data) || (a.id - b.id));
+      },
+      obter(id) {
+        return tabela('financeiro').find((l) => l.id === Number(id));
+      },
+      mesesComLancamento(area) {
+        const vistos = [];
+        for (const l of tabela('financeiro')) {
+          if (!verdadeiro(l.ativo)) continue;
+          if (area && l.area !== area) continue;
+          const m = String(l.data || '').slice(0, 7);
+          if (m && vistos.indexOf(m) < 0) vistos.push(m);
+        }
+        return vistos.sort(bin).reverse();
+      },
+      // No celular o lancamento nao entra no banco: ele volta ao
+      // computador pelo arquivo .financeiro ou pelo WhatsApp.
+      salvar() { throw new Error('O celular não grava lançamento; envie ao computador.'); },
+      salvarVarios() { throw new Error('O celular não grava lançamento; envie ao computador.'); },
+      excluir() { /* somente leitura */ }
+    };
+
     const templates = {
       obter(chave) {
         return tabela('templates').find((t) => t.chave === chave && verdadeiro(t.ativo));
@@ -200,7 +231,7 @@
     };
 
     return {
-      config, obreiros, datas, sessoes, presencas, templates, grupos, envios,
+      config, obreiros, datas, sessoes, presencas, financeiro, templates, grupos, envios,
       resumo: {
         gerado_em: pacote.gerado_em || null,
         obreiros: tabela('obreiros').length,
@@ -208,7 +239,8 @@
         datas: tabela('datas_calendario').length,
         sessoes: tabela('sessoes').length,
         modelos: tabela('templates').length,
-        chamadas: presencas.datasComChamada().length
+        chamadas: presencas.datasComChamada().length,
+        lancamentos: tabela('financeiro').length
       }
     };
   }

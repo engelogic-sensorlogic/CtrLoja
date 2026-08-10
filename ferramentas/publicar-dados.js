@@ -42,7 +42,10 @@ let DESTINO = DESTINO_PADRAO;
 // Chancelaria esta implementada; Secretaria, Tesouraria e Hospitalaria
 // entram aqui conforme forem construidas.
 const CARGOS = {
-  chancelaria: ['obreiros', 'familiares', 'datas_calendario', 'sessoes', 'templates', 'presencas']
+  chancelaria: ['obreiros', 'familiares', 'datas_calendario', 'sessoes', 'templates', 'presencas'],
+  secretaria: ['obreiros', 'familiares', 'sessoes'],
+  tesouraria: ['obreiros', 'financeiro'],
+  hospitalaria: ['obreiros', 'financeiro']
 };
 
 // Historico de envios e grupos do WhatsApp ficam no computador: o celular

@@ -137,12 +137,34 @@ nascimento e nomes de família **não aparece**. É uma tela de consulta.
 
 ### Cargos — protegidos por senha
 
-**Chancelaria**, **Secretaria**, **Tesouraria** e **Hospitalaria**. Dentro do Cargo é que ficam
-as funções de trabalho: **disparar as mensagens** pelo WhatsApp, consultar a **relação de
-Obreiros** e **solicitar inclusão** de informações.
+Cada Cargo tem as suas abas, e todos trazem **Obreiros** e **Solicitar**:
 
-Hoje só a Chancelaria tem telas próprias. As outras já aparecem na barra e oferecem o pedido de
-inclusão; as demais funções entram conforme forem definidas.
+| Cargo | Aba própria | O que faz nela |
+|-------|-------------|----------------|
+| **Chancelaria** | Mensagens · Presença | Dispara as mensagens do dia e faz a chamada da sessão |
+| **Secretaria** | Agenda da Loja | Acompanha a pauta, pede inclusão ou correção ao computador e avisa os Irmãos de mudança de última hora |
+| **Tesouraria** | Extrato Financeiro | Receitas, Despesas e Investimentos, mês a mês |
+| **Hospitalaria** | Extrato Financeiro | Receitas e Doações do Tronco de Solidariedade |
+
+---
+
+## Extrato Financeiro
+
+Tesouraria e Hospitalaria usam a **mesma tela**, mudando só as categorias:
+
+| | Entra | Sai |
+|---|---|---|
+| **Tesouraria** | Mensalidade, Promoções, Juros de Investimentos, Outros | Ágapes, Aluguel, Internet, Água, Luz, Manutenção do Templo, Promoções, Outros |
+| **Hospitalaria** | Tronco de Solidariedade, Promoções, Outros | Assistência a Irmão, a Família, Entidade Assistencial, Outros |
+
+O extrato abre no mês corrente, com setas para andar. Mostra o **saldo do mês**, o **acumulado**
+e a repartição por categoria.
+
+**Investimento não é despesa.** O dinheiro não saiu da Loja, só mudou de lugar — por isso fica
+fora do saldo e aparece à parte. Somá-lo como despesa daria impressão de prejuízo onde não há.
+
+**O lançamento volta ao computador** por arquivo `.financeiro` ou pelo WhatsApp, com conferência,
+igual à lista de presença. No CtrLoja: **Financeiro → 📥 Importar do celular**.
 
 ---
 

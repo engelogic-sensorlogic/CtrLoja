@@ -37,7 +37,8 @@
       abas: [
         { chave: 'hoje', nome: 'Hoje' },
         { chave: 'proximos', nome: 'Próximos' },
-        { chave: 'presenca', nome: 'Presença' }
+        { chave: 'presenca', nome: 'Presença' },
+        { chave: 'financas', nome: 'Finanças' }
       ]
     },
     {
@@ -58,10 +59,14 @@
       chave: 'secretaria',
       nome: 'Secretaria',
       icone: '📋',
-      descricao: 'Balaústres, presenças e correspondência',
+      descricao: 'Pauta das sessões, balaústres e correspondência',
       publico: false,
-      disponivel: false,
-      abas: [{ chave: 'solicitar', nome: 'Solicitar' }]
+      disponivel: true,
+      abas: [
+        { chave: 'agenda', nome: 'Agenda da Loja' },
+        { chave: 'obreiros', nome: 'Obreiros' },
+        { chave: 'solicitar', nome: 'Solicitar' }
+      ]
     },
     {
       chave: 'tesouraria',
@@ -69,17 +74,30 @@
       icone: '💰',
       descricao: 'Mensalidades, caixa e prestação de contas',
       publico: false,
-      disponivel: false,
-      abas: [{ chave: 'solicitar', nome: 'Solicitar' }]
+      disponivel: true,
+      // A area financeira que este cargo movimenta, declarada aqui para
+      // que a tela seja a mesma da Hospitalaria, mudando so as
+      // categorias - que vivem em src/main/services/financeiro.js.
+      areaFinanceira: 'tesouraria',
+      abas: [
+        { chave: 'extrato', nome: 'Extrato Financeiro' },
+        { chave: 'obreiros', nome: 'Obreiros' },
+        { chave: 'solicitar', nome: 'Solicitar' }
+      ]
     },
     {
       chave: 'hospitalaria',
       nome: 'Hospitalaria',
       icone: '🤝',
-      descricao: 'Tronco de beneficência e assistência aos Irmãos',
+      descricao: 'Tronco de solidariedade e assistência aos Irmãos',
       publico: false,
-      disponivel: false,
-      abas: [{ chave: 'solicitar', nome: 'Solicitar' }]
+      disponivel: true,
+      areaFinanceira: 'hospitalaria',
+      abas: [
+        { chave: 'extrato', nome: 'Extrato Financeiro' },
+        { chave: 'obreiros', nome: 'Obreiros' },
+        { chave: 'solicitar', nome: 'Solicitar' }
+      ]
     }
   ];
 

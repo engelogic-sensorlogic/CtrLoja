@@ -61,6 +61,17 @@ contextBridge.exposeInMainWorld('api', {
     salvar: (mapa) => call('config:salvar', mapa)
   },
 
+  financeiro: {
+    areas: () => call('financeiro:areas'),
+    extrato: (area, mes) => call('financeiro:extrato', area, mes),
+    painel: (area, limite) => call('financeiro:painel', area, limite),
+    meses: (area) => call('financeiro:meses', area),
+    salvar: (reg) => call('financeiro:salvar', reg),
+    excluir: (id) => call('financeiro:excluir', id),
+    lerPacote: (origem, conteudo) => call('financeiro:ler-pacote', origem, conteudo),
+    importar: (pacote) => call('financeiro:importar', pacote)
+  },
+
   publicacao: {
     estado: () => call('publicacao:estado'),
     publicar: (senha) => call('publicacao:publicar', senha),

@@ -303,6 +303,8 @@ call node --no-warnings test\teste-sincronizacao.js
 if errorlevel 1 goto :FALHA
 call node --no-warnings test\teste-presenca.js
 if errorlevel 1 goto :FALHA
+call node --no-warnings test\teste-financeiro.js
+if errorlevel 1 goto :FALHA
 call node --no-warnings test\teste-publicacao.js
 if errorlevel 1 goto :FALHA
 call node --no-warnings test\teste-convite.js

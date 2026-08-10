@@ -15,6 +15,8 @@ const presenca = require('./services/presenca');
 const presencaPacote = require('./services/presenca-pacote');
 const presencaPdf = require('./services/presenca-pdf');
 const convitePdf = require('./services/convite-pdf');
+const financeiro = require('./services/financeiro');
+const financeiroPacote = require('./services/financeiro-pacote');
 
 const isDev = process.argv.includes('--dev');
 
@@ -449,6 +451,76 @@ handle('presenca:exportar-pdf-frequencia', async (filtro) => {
     BrowserWindow, destino, est, db.config.obterTodas(), logosDaLoja()
   );
   return Object.assign({ cancelado: false }, r);
+});
+
+/* ------------------------------------------------------------------ */
+/* IPC - Tesouraria e Hospitalaria                                     */
+/* ------------------------------------------------------------------ */
+
+handle('financeiro:areas', () => Object.keys(financeiro.AREAS).map((c) => ({
+  chave: c,
+  nome: financeiro.AREAS[c].nome,
+  naturezas: financeiro.AREAS[c].naturezas
+})));
+
+handle('financeiro:extrato', (area, mes) => financeiro.extratoDoMes(area, mes));
+handle('financeiro:painel', (area, limite) => financeiro.painel(area, limite));
+handle('financeiro:meses', (area) => financeiro.mesesDisponiveis(area));
+
+handle('financeiro:salvar', (reg) => {
+  const salvo = db.financeiro.salvar(Object.assign({ origem: 'pc' }, reg));
+  return { lancamento: salvo, extrato: financeiro.extratoDoMes(salvo.area, salvo.data.slice(0, 7)) };
+});
+
+handle('financeiro:excluir', (id) => {
+  const antes = db.financeiro.obter(id);
+  if (!antes) throw new Error('Lançamento não encontrado.');
+  db.financeiro.excluir(id);
+  return financeiro.extratoDoMes(antes.area, antes.data.slice(0, 7));
+});
+
+/**
+ * Le o lancamento vindo do celular - arquivo .financeiro ou texto
+ * colado do WhatsApp - e devolve o que SERIA gravado, sem gravar nada.
+ */
+handle('financeiro:ler-pacote', async (origem, conteudo) => {
+  let texto = conteudo;
+
+  if (origem === 'arquivo') {
+    const res = await dialog.showOpenDialog(mainWindow, {
+      title: 'Importar lançamento financeiro',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Lançamento CtrLoja', extensions: ['financeiro', 'json', 'txt'] },
+        { name: 'Todos', extensions: ['*'] }
+      ]
+    });
+    if (res.canceled) return { cancelado: true };
+    texto = fs.readFileSync(res.filePaths[0], 'utf8');
+  }
+
+  const pacote = financeiroPacote.deTexto(texto);
+  const conhecidas = financeiro.naturezasDe(pacote.area).map((n) => n.chave);
+
+  return {
+    cancelado: false,
+    pacote,
+    area_nome: financeiro.area(pacote.area).nome,
+    total: pacote.itens.reduce((s, i) => s + Number(i.valor || 0), 0),
+    // Natureza que este cargo nao movimenta e recusada na hora de gravar
+    desconhecidas: pacote.itens.filter((i) => conhecidas.indexOf(i.natureza) < 0).length
+  };
+});
+
+handle('financeiro:importar', (pacote) => {
+  const valido = financeiroPacote.validar(pacote);
+  const r = db.financeiro.salvarVarios(valido.itens, {
+    area: valido.area,
+    origem: 'celular',
+    registrado_por: valido.lancadoPor || null
+  });
+  const mes = (valido.itens[0] || {}).data.slice(0, 7);
+  return Object.assign(r, { extrato: financeiro.extratoDoMes(valido.area, mes) });
 });
 
 /* ------------------------------------------------------------------ */

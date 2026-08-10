@@ -27,7 +27,7 @@
 
   // Aparece na aba Dados. Serve para conferir, de olho, se o aparelho
   // esta mesmo com a ultima versao publicada do aplicativo.
-  const VERSAO_APP = '2026.08.06-4';
+  const VERSAO_APP = '2026.08.09-5';
 
   const CHAVE = 'ctrloja.pacote';
   const CHAVE_VERSAO = 'ctrloja.versao';
@@ -51,7 +51,10 @@
     // Chamada em andamento: sessão escolhida, marcações e quem a faz
     chamadaData: null,
     chamadaMarcados: null,
-    chamadaPor: ''
+    chamadaPor: '',
+    // Mês aberto no extrato de cada área, e quem está lançando
+    extratoMes: {},
+    lancadoPor: ''
   };
 
   /* ---------------- utilidades ---------------- */
@@ -899,6 +902,488 @@
     return caixa;
   }
 
+  /* --- Dinheiro --- */
+
+  /* Formata em real. O separador de milhar é aplicado só na parte
+     inteira — mexer na cadeia inteira acabaria comendo os centavos. */
+  const moeda = (v) => {
+    const n = Number(v || 0);
+    const partes = Math.abs(n).toFixed(2).split('.');
+    const inteiro = partes[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return (n < 0 ? '- ' : '') + 'R$ ' + inteiro + ',' + partes[1];
+  };
+
+  /* --- Gráfico financeiro: barras de entrada e saída por mês --- */
+
+  function graficoFinanceiro(serie, naturezas) {
+    const dados = serie.slice(-8);
+    if (!dados.length) return null;
+
+    const entram = naturezas.filter((n) => n.sinal > 0).map((n) => n.chave);
+    const saem = naturezas.filter((n) => n.sinal < 0).map((n) => n.chave);
+    const soma = (p, chaves) => chaves.reduce((s, c) => s + (Number(p[c]) || 0), 0);
+
+    const maior = Math.max(1, ...dados.map((p) => Math.max(soma(p, entram), soma(p, saem))));
+
+    const L = 300, A = 130, base = A - 20, topo = 10;
+    const passo = L / dados.length;
+    const barra = Math.min(passo * 0.3, 14);
+
+    const g = svg('svg', { viewBox: `0 0 ${L} ${A}`, class: 'grafico' });
+
+    dados.forEach((p, i) => {
+      const meio = i * passo + passo / 2;
+      const alt = (v) => Math.max(1, (v / maior) * (base - topo));
+
+      const hE = alt(soma(p, entram));
+      const hS = alt(soma(p, saem));
+
+      g.appendChild(svg('rect', {
+        x: meio - barra - 1, y: base - hE, width: barra, height: hE, rx: 2, fill: 'var(--c-ok)'
+      }));
+      g.appendChild(svg('rect', {
+        x: meio + 1, y: base - hS, width: barra, height: hS, rx: 2, fill: '#D98324'
+      }));
+      g.appendChild(svg('text', {
+        x: meio, y: A - 6, 'text-anchor': 'middle', 'font-size': '8', fill: 'var(--c-texto-suave)'
+      }, [document.createTextNode(p.mes.slice(5) + '/' + p.mes.slice(2, 4))]));
+    });
+
+    g.appendChild(svg('line', {
+      x1: 0, y1: base, x2: L, y2: base, stroke: 'var(--c-borda)', 'stroke-width': 1
+    }));
+    return g;
+  }
+
+  function legendaFinanceira(naturezas) {
+    const item = (cor, nome) => el('span', { class: 'legenda-item' }, [
+      el('i', { style: 'background:' + cor }), document.createTextNode(nome)
+    ]);
+    return el('div', { class: 'legenda-cores' }, [
+      item('var(--c-ok)', naturezas.filter((n) => n.sinal > 0).map((n) => n.nome).join(' / ')),
+      item('#D98324', naturezas.filter((n) => n.sinal < 0).map((n) => n.nome).join(' / '))
+    ]);
+  }
+
+  /* --- Secretaria: Agenda da Loja --- */
+  /*
+     A mesma lista de Próximos, mas só das sessões: é a pauta que o
+     Secretário acompanha. Daqui ele pede ao computador a inclusão ou a
+     correção da ordem do dia, e avisa os Irmãos de mudança de última
+     hora — sem escrever no cadastro, que continua sendo do PC Mestre.
+  */
+
+  function telaAgendaSecretaria(area) {
+    const caixa = el('div');
+    const hoje = hojeISO();
+    const sessoes = app.banco.sessoes.listar({ de: hoje, somenteAtivas: true });
+
+    caixa.appendChild(el('div', { class: 'aviso info', text: 'Próximas sessões programadas' }));
+
+    if (!sessoes.length) {
+      caixa.appendChild(el('div', { class: 'cartao' }, [
+        el('div', { class: 'vazio', text: 'Nenhuma sessão programada daqui em diante.' })
+      ]));
+    }
+
+    const ROTULO_TIPO = { Economica: 'Econômica', Magna: 'Magna' };
+
+    for (const s of sessoes) {
+      const pauta = String(s.agenda_dia || '').trim();
+      const bloco = el('div', { class: 'evento leitura com-detalhe' }, [
+        el('div', { class: 'evento-topo' }, [
+          el('div', { class: 'evento-data' }, [
+            el('span', { class: 'd', text: s.data.slice(8, 10) }),
+            el('span', { class: 'm', text: MESES_CURTO[Number(s.data.slice(5, 7)) - 1] })
+          ]),
+          el('div', { class: 'evento-info' }, [
+            el('strong', { text: `Sessão ${ROTULO_TIPO[s.tipo] || s.tipo} — Grau de ${s.grau}` }),
+            el('small', { text: [s.hora ? 'Às ' + s.hora : null, s.local].filter(Boolean).join(' · ') })
+          ]),
+          el('span', { class: 'tag sessao', text: 'Sessão' })
+        ])
+      ]);
+
+      bloco.appendChild(pauta
+        ? el('div', { class: 'pauta' }, [
+          el('h4', { text: 'Agenda do Dia' }),
+          el('pre', { text: pauta })
+        ])
+        : el('div', { class: 'sessao-detalhe', style: 'font-style:italic', text: 'Ordem do dia ainda não lançada.' }));
+
+      caixa.appendChild(bloco);
+    }
+
+    /* --- pedidos ao PC Mestre e aviso aos Irmãos --- */
+
+    const selSessao = el('select', { class: 'campo-largo' });
+    for (const s of sessoes) {
+      selSessao.appendChild(el('option', {
+        value: s.data,
+        text: `${s.data.slice(8, 10)}/${s.data.slice(5, 7)} — ${ROTULO_TIPO[s.tipo] || s.tipo}, Grau de ${s.grau}`
+      }));
+    }
+
+    const texto = el('textarea', {
+      class: 'campo-largo', rows: '5',
+      placeholder: 'Descreva a ordem do dia, ou o que deve ser corrigido nela'
+    });
+    const assina = el('input', { type: 'text', class: 'campo-largo', placeholder: 'Seu nome' });
+
+    const escolhida = () => sessoes.find((s) => s.data === selSessao.value) || sessoes[0] || null;
+
+    function pedidoDePauta() {
+      const cfg = app.banco.config.obterTodas();
+      const s = escolhida();
+      const linhas = [
+        '*PEDIDO — SECRETARIA*',
+        cfg.loja_nome || '',
+        '',
+        'Assunto: Agenda do Dia'
+      ];
+      if (s) {
+        linhas.push('Sessão: ' + dataExtenso(s.data));
+        linhas.push(`${ROTULO_TIPO[s.tipo] || s.tipo}, Grau de ${s.grau}`);
+      }
+      if (assina.value.trim()) linhas.push('Solicitante: ' + assina.value.trim());
+      if (texto.value.trim()) linhas.push('', texto.value.trim());
+      linhas.push('', '_Enviado pelo CtrLoja em ' + dataExtenso(hojeISO()) + '_');
+      return linhas.filter((l, i, a) => !(l === '' && a[i - 1] === '')).join('\n');
+    }
+
+    function avisoAosIrmaos() {
+      const cfg = app.banco.config.obterTodas();
+      const s = escolhida();
+      const linhas = ['*ALTERAÇÃO NA PAUTA*', cfg.loja_nome || ''];
+      if (s) {
+        linhas.push('');
+        linhas.push('Sessão de ' + dataExtenso(s.data));
+        linhas.push(`${ROTULO_TIPO[s.tipo] || s.tipo}, Grau de ${s.grau}`);
+      }
+      if (texto.value.trim()) linhas.push('', texto.value.trim());
+      linhas.push('', 'T∴F∴A∴');
+      return linhas.filter((l, i, a) => !(l === '' && a[i - 1] === '')).join('\n');
+    }
+
+    const cartao = el('div', { class: 'cartao' }, [
+      el('h2', { text: 'Pauta da sessão' }),
+      el('p', {
+        style: 'font-size:13px;color:var(--c-texto-suave);line-height:1.55;margin-top:0',
+        text: 'A ordem do dia é lançada no computador da Loja. Daqui você pede a inclusão ou a '
+          + 'correção, e avisa os Irmãos quando algo muda em cima da hora.'
+      }),
+      sessoes.length ? el('label', { class: 'campo-mobile' }, [el('span', { text: 'Sessão' }), selSessao]) : null,
+      el('label', { class: 'campo-mobile' }, [el('span', { text: 'Seu nome' }), assina]),
+      el('label', { class: 'campo-mobile' }, [el('span', { text: 'Ordem do dia ou correção' }), texto]),
+      el('button', {
+        class: 'btn largo', text: '📤 Pedir ao computador da Loja',
+        onclick: () => {
+          if (!texto.value.trim()) { aviso('Escreva a ordem do dia ou o que deve mudar.', 'erro'); return; }
+          if (!assina.value.trim()) { aviso('Informe o seu nome.', 'erro'); return; }
+          enviarPeloWhatsApp(pedidoDePauta());
+        }
+      }),
+      el('div', { style: 'height:8px' }),
+      el('button', {
+        class: 'btn zap largo', text: '📣 Avisar os Irmãos da alteração',
+        onclick: () => {
+          if (!texto.value.trim()) { aviso('Escreva o que mudou na pauta.', 'erro'); return; }
+          enviarPeloWhatsApp(avisoAosIrmaos());
+        }
+      }),
+      el('p', {
+        class: 'legenda',
+        text: 'O primeiro botão fala com quem lança no cadastro. O segundo fala com a Loja inteira — '
+          + 'use para mudança de última hora, antes da sessão.'
+      })
+    ]);
+
+    caixa.appendChild(cartao);
+    return caixa;
+  }
+
+  /* --- Tesouraria e Hospitalaria: Extrato Financeiro --- */
+  /*
+     Uma tela só para os dois cargos. Eles têm a mesma forma — entra
+     dinheiro, sai dinheiro, sobra um saldo — e o que muda são os
+     rótulos e as categorias, que vêm declarados do lado do computador,
+     em src/main/services/financeiro.js. Duas telas quase iguais seriam
+     duas oportunidades de divergir.
+
+     O celular não grava no cadastro: o lançamento vira um pacote que
+     volta ao PC Mestre por arquivo ou pelo WhatsApp.
+  */
+
+  function telaExtrato(area) {
+    const chaveArea = area.areaFinanceira;
+    const caixa = el('div');
+    const fin = app.nucleo.financeiro;
+
+    if (!app.extratoMes[chaveArea]) app.extratoMes[chaveArea] = fin.mesAtual();
+    const mes = app.extratoMes[chaveArea];
+    const extrato = fin.extratoDoMes(chaveArea, mes);
+    const naturezas = fin.naturezasDe(chaveArea);
+
+    /* --- navegação por mês --- */
+
+    caixa.appendChild(el('div', { class: 'linha-data' }, [
+      el('button', {
+        class: 'btn secundario', style: 'flex:0 0 46px', text: '‹',
+        onclick: () => { app.extratoMes[chaveArea] = fin.somarMes(mes, -1); pintar(); }
+      }),
+      el('div', { class: 'mes-atual', text: extrato.mes_extenso }),
+      el('button', {
+        class: 'btn secundario', style: 'flex:0 0 46px', text: '›',
+        onclick: () => { app.extratoMes[chaveArea] = fin.somarMes(mes, 1); pintar(); }
+      })
+    ]));
+
+    if (mes !== fin.mesAtual()) {
+      caixa.appendChild(el('button', {
+        class: 'btn secundario largo', style: 'margin-bottom:12px', text: 'Voltar para o mês atual',
+        onclick: () => { app.extratoMes[chaveArea] = fin.mesAtual(); pintar(); }
+      }));
+    }
+
+    /* --- saldo em destaque --- */
+
+    caixa.appendChild(el('div', { class: 'saldo' + (extrato.saldo < 0 ? ' negativo' : '') }, [
+      el('div', { class: 'rotulo', text: 'Saldo do mês' }),
+      el('div', { class: 'valor', text: moeda(extrato.saldo) }),
+      el('div', { class: 'acumulado', text: 'Acumulado até aqui: ' + moeda(extrato.acumulado) }),
+      extrato.investido !== null && extrato.investido > 0
+        ? el('div', { class: 'acumulado', text: 'Investido: ' + moeda(extrato.investido) })
+        : null
+    ]));
+
+    /* --- lançamentos por natureza --- */
+
+    for (const n of extrato.naturezas) {
+      const cartao = el('div', { class: 'cartao' }, [
+        el('div', { class: 'natureza-topo' }, [
+          el('h2', { text: n.nome + (n.quantidade ? ` (${n.quantidade})` : '') }),
+          el('span', {
+            class: 'natureza-total' + (n.sinal < 0 ? ' saida' : (n.sinal > 0 ? ' entrada' : '')),
+            text: moeda(n.total)
+          })
+        ])
+      ]);
+
+      if (!n.itens.length) {
+        cartao.appendChild(el('div', { class: 'vazio', text: 'Nenhum lançamento neste mês.' }));
+      } else {
+        for (const i of n.itens) {
+          cartao.appendChild(el('div', { class: 'item-lista' }, [
+            el('div', { class: 'freq-topo' }, [
+              el('strong', { text: i.categoria || 'Outros' }),
+              el('span', { class: 'freq-pct', text: moeda(i.valor) })
+            ]),
+            el('small', {
+              text: [i.data.slice(8, 10) + '/' + i.data.slice(5, 7), i.descricao].filter(Boolean).join(' — ')
+            })
+          ]));
+        }
+
+        if (n.categorias.length > 1) {
+          const rep = el('div', { style: 'margin-top:10px' });
+          for (const c of n.categorias) {
+            rep.appendChild(el('div', { style: 'margin-bottom:6px' }, [
+              el('div', { class: 'freq-topo' }, [
+                el('small', { text: c.categoria }),
+                el('small', { text: c.percentual + '%' })
+              ]),
+              barraPercentual(c.percentual)
+            ]));
+          }
+          cartao.appendChild(rep);
+        }
+      }
+      caixa.appendChild(cartao);
+    }
+
+    /* --- novo lançamento, que volta ao PC Mestre --- */
+
+    const selNatureza = el('select', { class: 'campo-largo' });
+    for (const n of naturezas) {
+      selNatureza.appendChild(el('option', { value: n.chave, text: n.nome }));
+    }
+
+    const selCategoria = el('select', { class: 'campo-largo' });
+    const pintarCategorias = () => {
+      const n = fin.natureza(chaveArea, selNatureza.value);
+      selCategoria.innerHTML = '';
+      for (const c of (n ? n.categorias : [])) {
+        selCategoria.appendChild(el('option', { value: c, text: c }));
+      }
+    };
+    selNatureza.addEventListener('change', pintarCategorias);
+    pintarCategorias();
+
+    const campoData = el('input', { type: 'date', class: 'campo-largo', value: hojeISO() });
+    const campoValor = el('input', {
+      type: 'number', class: 'campo-largo', step: '0.01', min: '0', placeholder: '0,00', inputmode: 'decimal'
+    });
+    const campoDescricao = el('input', { type: 'text', class: 'campo-largo', placeholder: 'Descrição (opcional)' });
+    const campoQuem = el('input', {
+      type: 'text', class: 'campo-largo', placeholder: 'Quem está lançando',
+      value: app.lancadoPor || ''
+    });
+    campoQuem.addEventListener('input', () => { app.lancadoPor = campoQuem.value; });
+
+    function montarPacote() {
+      const cfg = app.banco.config.obterTodas();
+      return app.nucleo.financeiroPacote.montar({
+        area: chaveArea,
+        loja: cfg.loja_nome || '',
+        lancadoPor: (campoQuem.value || '').trim() || null,
+        itens: [{
+          data: campoData.value,
+          natureza: selNatureza.value,
+          categoria: selCategoria.value,
+          descricao: campoDescricao.value,
+          valor: Number(String(campoValor.value).replace(',', '.'))
+        }]
+      });
+    }
+
+    const conferirCampos = () => {
+      if (!campoData.value) { aviso('Informe a data do lançamento.', 'erro'); return false; }
+      const v = Number(String(campoValor.value).replace(',', '.'));
+      if (!Number.isFinite(v) || v <= 0) { aviso('Informe um valor maior que zero.', 'erro'); return false; }
+      return true;
+    };
+
+    caixa.appendChild(el('div', { class: 'cartao' }, [
+      el('h2', { text: 'Novo lançamento' }),
+      el('p', {
+        style: 'font-size:13px;color:var(--c-texto-suave);line-height:1.55;margin-top:0',
+        text: 'O celular não grava no cadastro da Loja. O lançamento vai ao computador, é '
+          + 'conferido lá e volta publicado a todos os Irmãos.'
+      }),
+      el('label', { class: 'campo-mobile' }, [el('span', { text: 'Natureza' }), selNatureza]),
+      el('label', { class: 'campo-mobile' }, [el('span', { text: 'Categoria' }), selCategoria]),
+      el('label', { class: 'campo-mobile' }, [el('span', { text: 'Data' }), campoData]),
+      el('label', { class: 'campo-mobile' }, [el('span', { text: 'Valor (R$)' }), campoValor]),
+      el('label', { class: 'campo-mobile' }, [el('span', { text: 'Descrição' }), campoDescricao]),
+      el('label', { class: 'campo-mobile' }, [el('span', { text: 'Lançado por' }), campoQuem]),
+
+      el('button', {
+        class: 'btn zap largo', text: '📤 Enviar pelo WhatsApp',
+        onclick: () => {
+          if (!conferirCampos()) return;
+          try { enviarPeloWhatsApp(app.nucleo.financeiroPacote.paraTexto(montarPacote())); }
+          catch (err) { aviso(err.message || 'Falha ao montar o lançamento.', 'erro', 7000); }
+        }
+      }),
+      el('div', { style: 'height:8px' }),
+      el('button', {
+        class: 'btn secundario largo', text: '💾 Salvar arquivo .financeiro',
+        onclick: () => {
+          if (!conferirCampos()) return;
+          try {
+            const pacote = montarPacote();
+            const nome = app.nucleo.financeiroPacote.nomeArquivo(pacote);
+            const blob = new Blob([JSON.stringify(pacote, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = el('a', { href: url, download: nome });
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 4000);
+            aviso('Arquivo ' + nome + ' salvo. Leve-o ao computador e importe.', 'ok', 8000);
+          } catch (err) {
+            aviso(err.message || 'Falha ao gerar o arquivo.', 'erro', 7000);
+          }
+        }
+      }),
+      el('p', {
+        class: 'legenda',
+        text: 'O arquivo é o caminho mais seguro: nada se perde se a mensagem for cortada.'
+      })
+    ]));
+
+    return caixa;
+  }
+
+  /* --- Início: situação financeira, aberta a todos --- */
+
+  function blocoFinanceiroPublico(chaveArea) {
+    const fin = app.nucleo.financeiro;
+    const p = fin.painel(chaveArea, 8);
+    const bloco = el('section', { class: 'grupo' });
+
+    bloco.appendChild(el('h2', { class: 'grupo-titulo', text: p.area_nome }));
+
+    if (!p.tem_dados) {
+      bloco.appendChild(el('div', { class: 'cartao' }, [
+        el('div', { class: 'vazio', text: 'Nenhum lançamento registrado ainda.' })
+      ]));
+      return bloco;
+    }
+
+    bloco.appendChild(el('div', { class: 'saldo' + (p.saldo_atual < 0 ? ' negativo' : '') }, [
+      el('div', { class: 'rotulo', text: 'Saldo atual' }),
+      el('div', { class: 'valor', text: moeda(p.saldo_atual) }),
+      el('div', { class: 'acumulado', text: 'Movimento de ' + p.mes_extenso + ': ' + moeda(p.saldo_mes) }),
+      p.investido ? el('div', { class: 'acumulado', text: 'Investido: ' + moeda(p.investido) }) : null
+    ]));
+
+    const metricas = el('div', { class: 'metricas', style: 'margin-bottom:12px' });
+    for (const n of p.naturezas) {
+      if (!n.sinal) continue;
+      metricas.appendChild(el('div', { class: 'metrica' }, [
+        el('div', { class: 'valor', style: 'font-size:15px', text: moeda(p.totais[n.chave]) }),
+        el('div', { class: 'rotulo', text: n.nome + ' (total)' })
+      ]));
+    }
+    bloco.appendChild(metricas);
+
+    const g = graficoFinanceiro(p.serie, p.naturezas);
+    if (g) {
+      bloco.appendChild(el('div', { class: 'cartao' }, [
+        el('h2', { text: 'Movimento mês a mês' }),
+        g,
+        legendaFinanceira(p.naturezas)
+      ]));
+    }
+
+    /* Repartição do mês por categoria — sem lançamento a lançamento */
+    for (const n of p.naturezas) {
+      const cats = p.categorias[n.chave] || [];
+      if (!n.sinal || !cats.length) continue;
+
+      const cartao = el('div', { class: 'cartao' }, [
+        el('h2', { text: n.nome + ' de ' + p.mes_extenso })
+      ]);
+      for (const c of cats) {
+        cartao.appendChild(el('div', { class: 'item-lista' }, [
+          el('div', { class: 'freq-topo' }, [
+            el('strong', { text: c.categoria }),
+            el('span', { class: 'freq-pct', text: moeda(c.total) })
+          ]),
+          barraPercentual(c.percentual),
+          el('small', { text: c.percentual + '% do total' })
+        ]));
+      }
+      bloco.appendChild(cartao);
+    }
+
+    return bloco;
+  }
+
+  function telaFinancasPublicas() {
+    const caixa = el('div');
+    caixa.appendChild(el('div', {
+      class: 'aviso info',
+      text: 'Situação financeira da Loja, como prestada em sessão. '
+        + 'Os lançamentos individuais ficam com a Tesouraria e a Hospitalaria.'
+    }));
+    caixa.appendChild(blocoFinanceiroPublico('tesouraria'));
+    caixa.appendChild(el('hr', { class: 'divisor' }));
+    caixa.appendChild(blocoFinanceiroPublico('hospitalaria'));
+    return caixa;
+  }
+
   /* --- Solicitar inclusão --- */
   /*
      O aplicativo do celular nao escreve no banco da Loja: o cadastro e
@@ -1206,8 +1691,14 @@
         alvo.appendChild(telaMensagens());
       } else if (app.aba === 'presenca') {
         alvo.appendChild(telaPresencaPublica());
+      } else if (app.aba === 'financas') {
+        alvo.appendChild(telaFinancasPublicas());
       } else if (app.aba === 'chamada') {
         alvo.appendChild(telaChamada());
+      } else if (app.aba === 'agenda') {
+        alvo.appendChild(telaAgendaSecretaria(area));
+      } else if (app.aba === 'extrato') {
+        alvo.appendChild(telaExtrato(area));
       } else if (app.aba === 'obreiros') {
         alvo.appendChild(telaObreiros());
       } else {

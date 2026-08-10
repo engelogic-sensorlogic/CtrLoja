@@ -26,7 +26,9 @@
     { nome: 'templates', arquivo: 'templates.js' },
     { nome: 'agenda', arquivo: 'agenda.js' },
     { nome: 'presenca', arquivo: 'presenca.js' },
-    { nome: 'presencaPacote', arquivo: 'presenca-pacote.js' }
+    { nome: 'presencaPacote', arquivo: 'presenca-pacote.js' },
+    { nome: 'financeiro', arquivo: 'financeiro.js' },
+    { nome: 'financeiroPacote', arquivo: 'financeiro-pacote.js' }
   ];
 
   let cacheFontes = null;
@@ -60,6 +62,7 @@
       if (/\.\/templates$/.test(pedido)) return registro.templates;
       if (/\.\/agenda$/.test(pedido)) return registro.agenda;
       if (/\.\/presenca$/.test(pedido)) return registro.presenca;
+      if (/\.\/financeiro$/.test(pedido)) return registro.financeiro;
       throw new Error(`Módulo não disponível no celular: ${pedido}`);
     };
 

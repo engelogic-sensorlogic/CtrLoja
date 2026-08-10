@@ -129,20 +129,42 @@ function subirServidor(dirDados) {
   ok('nenhum Cargo é público',
     cargos.lista.filter((c) => c.chave !== 'inicio').every((c) => c.publico === false));
 
-  ok('Início: Hoje, Próximos, Presença e Dados',
-    cargos.abasDe('inicio').map((a) => a.chave).join() === 'hoje,proximos,presenca,dados',
+  ok('Início: Hoje, Próximos, Presença, Finanças e Dados',
+    cargos.abasDe('inicio').map((a) => a.chave).join() === 'hoje,proximos,presenca,financas,dados',
     cargos.abasDe('inicio').map((a) => a.chave).join());
-  ok('Início não tem disparo, nem Obreiros, nem a chamada',
-    !cargos.abasDe('inicio').some((a) => ['mensagens', 'obreiros', 'chamada'].includes(a.chave)));
+  ok('Início não tem disparo, nem Obreiros, nem a chamada, nem lançamento',
+    !cargos.abasDe('inicio').some((a) => ['mensagens', 'obreiros', 'chamada', 'extrato'].includes(a.chave)));
 
   ok('Chancelaria: Mensagens, Presença, Obreiros e Solicitar',
     cargos.abasDe('chancelaria').map((a) => a.chave).join() === 'mensagens,chamada,obreiros,solicitar',
     cargos.abasDe('chancelaria').map((a) => a.chave).join());
-  ok('Chancelaria é a única implementada',
-    cargos.lista.filter((c) => c.disponivel).map((c) => c.chave).join() === 'inicio,chancelaria');
-  for (const c of ['secretaria', 'tesouraria', 'hospitalaria']) {
-    ok(`${c} ainda sem abas próprias`, cargos.abasDe(c).length === 0);
+  ok('Secretaria: Agenda da Loja, Obreiros e Solicitar',
+    cargos.abasDe('secretaria').map((a) => a.chave).join() === 'agenda,obreiros,solicitar',
+    cargos.abasDe('secretaria').map((a) => a.chave).join());
+
+  for (const c of ['tesouraria', 'hospitalaria']) {
+    ok(`${c}: Extrato Financeiro, Obreiros e Solicitar`,
+      cargos.abasDe(c).map((a) => a.chave).join() === 'extrato,obreiros,solicitar',
+      cargos.abasDe(c).map((a) => a.chave).join());
   }
+
+  ok('os quatro Cargos estão implementados',
+    cargos.lista.filter((c) => c.disponivel).length === 5,
+    cargos.lista.filter((c) => c.disponivel).map((c) => c.chave).join());
+
+  /* Obreiros e Solicitar sao iguais em todo cargo: e o combinado, e e o
+     que impede cada um de criar a sua propria versao da mesma coisa. */
+  for (const c of ['chancelaria', 'secretaria', 'tesouraria', 'hospitalaria']) {
+    const abas = cargos.abasDe(c).map((a) => a.chave);
+    ok(`${c} traz Obreiros e Solicitar`, abas.includes('obreiros') && abas.includes('solicitar'));
+  }
+
+  ok('só quem movimenta dinheiro declara área financeira',
+    cargos.obter('tesouraria').areaFinanceira === 'tesouraria'
+    && cargos.obter('hospitalaria').areaFinanceira === 'hospitalaria'
+    && !cargos.obter('secretaria').areaFinanceira
+    && !cargos.obter('chancelaria').areaFinanceira);
+
   ok('a chave da senha segue o padrão publicado',
     cargos.chaveSenha('chancelaria') === 'senha_cargo_chancelaria');
 
@@ -157,11 +179,14 @@ function subirServidor(dirDados) {
   const envelope = await self.fetch('dados/' + info.arquivo).then((r) => r.json());
   const pacote = await self.CtrLojaCripto.decifrar(envelope, SENHA_TESTE);
   ok('pacote decifrado', pacote.formato === 'ctrloja-backup');
-  ok('cargos declarados no pacote', JSON.stringify(pacote.cargos) === '["chancelaria"]');
+  ok('os quatro cargos declarados no pacote',
+    JSON.stringify(pacote.cargos) === '["chancelaria","secretaria","tesouraria","hospitalaria"]',
+    JSON.stringify(pacote.cargos));
 
   console.log('\n== O que NÃO foi publicado ==');
   ok('grupos do WhatsApp ficaram no PC', !pacote.dados.grupos);
   ok('histórico de envios ficou no PC', !pacote.dados.envios_log);
+  ok('os lançamentos financeiros foram publicados', 'financeiro' in pacote.dados);
   const chaves = (pacote.dados.config || []).map((c) => c.chave);
   ok('configurações internas ficaram no PC',
     !chaves.includes('cnpj') && !chaves.includes('wa_autoconectar') && !chaves.includes('disparo_modo'),

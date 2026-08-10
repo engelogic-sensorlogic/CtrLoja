@@ -171,6 +171,12 @@ if errorlevel 1 (
   echo        Rode "rodar.bat testes" para ver os detalhes.
   goto :FALHA
 )
+call node --no-warnings test\teste-financeiro.js >nul 2>&1
+if errorlevel 1 (
+  echo [ERRO] Testes do financeiro falharam. Build interrompido.
+  echo        Rode "rodar.bat testes" para ver os detalhes.
+  goto :FALHA
+)
 call node --no-warnings test\teste-publicacao.js >nul 2>&1
 if errorlevel 1 (
   echo [ERRO] Testes da publicacao falharam. Build interrompido.
