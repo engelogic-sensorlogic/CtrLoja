@@ -175,7 +175,16 @@
       // No celular a gravacao acontece na tela, nao no banco: a lista
       // marcada volta ao computador pelo arquivo .presenca.
       registrarLista() { throw new Error('O celular não grava presença; envie a lista ao computador.'); },
-      limparSessao() { /* somente leitura */ }
+      limparSessao() { /* somente leitura */ },
+
+      visitantesTodos() {
+        return tabela('visitantes').slice().sort((a, b) => bin(a.sessao_data, b.sessao_data));
+      },
+      visitantesDe(data) {
+        const l = tabela('visitantes').find((v) => v.sessao_data === data);
+        return l ? Number(l.quantidade) || 0 : 0;
+      },
+      registrarVisitantes() { throw new Error('O celular não grava presença; envie a lista ao computador.'); }
     };
 
     /* Mesma ordenacao do SQLite (ORDER BY data, id) para que o extrato

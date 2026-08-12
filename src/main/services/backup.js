@@ -12,7 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const db = require('../db/database');
 
-const TABELAS = ['obreiros', 'familiares', 'datas_calendario', 'templates', 'sessoes', 'presencas', 'financeiro', 'grupos', 'config', 'envios_log'];
+const TABELAS = ['obreiros', 'familiares', 'datas_calendario', 'templates', 'sessoes', 'presencas', 'visitantes', 'financeiro', 'grupos', 'config', 'envios_log'];
 const FORMATO = 'ctrloja-backup';
 const VERSAO = 1;
 

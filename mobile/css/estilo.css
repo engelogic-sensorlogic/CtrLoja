@@ -283,6 +283,18 @@ textarea.campo-largo { resize: vertical; line-height: 1.5; }
 .barra-dentro.media { background: var(--c-acento); }
 .barra-dentro.baixa { background: #D98324; }
 
+/* ---------------------- Eventos da Semana ---------------------- */
+
+/* Lista lida em sessão, de pé, com o aparelho longe dos olhos e sob a
+   luz do Templo: tudo um degrau maior que o resto do aplicativo. */
+.evento.semana .evento-info strong { font-size: 17px; line-height: 1.3; }
+.evento.semana .evento-info small { font-size: 13.5px; }
+.evento.semana .evento-data .d { font-size: 21px; }
+.evento.semana .evento-data .m { font-size: 10px; }
+.evento.semana .evento-topo { padding: 14px 12px; }
+.evento.semana .pauta pre { font-size: 15px; line-height: 1.6; }
+.evento.semana .tag { font-size: 11px; }
+
 /* ---------------------- Financeiro ---------------------- */
 
 .mes-atual {

@@ -141,7 +141,7 @@ Cada Cargo tem as suas abas, e todos trazem **Obreiros** e **Solicitar**:
 
 | Cargo | Aba própria | O que faz nela |
 |-------|-------------|----------------|
-| **Chancelaria** | Mensagens · Presença | Dispara as mensagens do dia e faz a chamada da sessão |
+| **Chancelaria** | Eventos da Semana · Mensagens · Presença | A pauta da semana em letra grande para ler em sessão, o disparo das mensagens e a chamada |
 | **Secretaria** | Agenda da Loja | Acompanha a pauta, pede inclusão ou correção ao computador e avisa os Irmãos de mudança de última hora |
 | **Tesouraria** | Extrato Financeiro | Receitas, Despesas e Investimentos, mês a mês |
 | **Hospitalaria** | Extrato Financeiro | Receitas e Doações do Tronco de Solidariedade |

@@ -135,8 +135,8 @@ function subirServidor(dirDados) {
   ok('Início não tem disparo, nem Obreiros, nem a chamada, nem lançamento',
     !cargos.abasDe('inicio').some((a) => ['mensagens', 'obreiros', 'chamada', 'extrato'].includes(a.chave)));
 
-  ok('Chancelaria: Mensagens, Presença, Obreiros e Solicitar',
-    cargos.abasDe('chancelaria').map((a) => a.chave).join() === 'mensagens,chamada,obreiros,solicitar',
+  ok('Chancelaria: Semana, Mensagens, Presença, Obreiros e Solicitar',
+    cargos.abasDe('chancelaria').map((a) => a.chave).join() === 'semana,mensagens,chamada,obreiros,solicitar',
     cargos.abasDe('chancelaria').map((a) => a.chave).join());
   ok('Secretaria: Agenda da Loja, Obreiros e Solicitar',
     cargos.abasDe('secretaria').map((a) => a.chave).join() === 'agenda,obreiros,solicitar',
@@ -187,6 +187,7 @@ function subirServidor(dirDados) {
   ok('grupos do WhatsApp ficaram no PC', !pacote.dados.grupos);
   ok('histórico de envios ficou no PC', !pacote.dados.envios_log);
   ok('os lançamentos financeiros foram publicados', 'financeiro' in pacote.dados);
+  ok('os visitantes foram publicados', 'visitantes' in pacote.dados);
   const chaves = (pacote.dados.config || []).map((c) => c.chave);
   ok('configurações internas ficaram no PC',
     !chaves.includes('cnpj') && !chaves.includes('wa_autoconectar') && !chaves.includes('disparo_modo'),

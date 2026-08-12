@@ -17,7 +17,18 @@ let falhas=0; const ok=(n,c,e='')=>{console.log((c?'  OK  ':'FALHA ')+n+(e?' -> 
 console.log('== Seeds ==');
 ok('config semeada', Object.keys(db.config.obterTodas()).length>=12);
 ok('templates semeados', db.templates.listar().length===15, String(db.templates.listar().length));
-ok('datas semeadas', db.datas.listar().length===56, String(db.datas.listar().length));
+/* O numero cresce quando o calendario ganha datas novas - foi o caso
+   dos dias das profissoes. Conferir a lista inteira contra um numero
+   fixo so obriga a mexer no teste; o que importa e que o seed entrou e
+   que cada categoria esta representada. */
+const semeadas = db.datas.listar();
+ok('datas semeadas', semeadas.length >= 56, String(semeadas.length));
+for (const c of ['feriado_religioso', 'data_nacional', 'efemeride', 'maconica']) {
+  ok(`categoria ${c} presente`, semeadas.some((d) => d.categoria === c));
+}
+ok('dias das profissões entraram',
+  semeadas.filter((d) => String(d.chave).startsWith('prof_')).length >= 15,
+  String(semeadas.filter((d) => String(d.chave).startsWith('prof_')).length));
 
 console.log('== CRUD obreiro ==');
 const o=db.obreiros.salvar({nome:'João Carlos de Souza',tratamento:'Ir.∴',grau:'Mestre',situacao:'Ativo',

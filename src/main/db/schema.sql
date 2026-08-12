@@ -140,6 +140,17 @@ CREATE TABLE IF NOT EXISTS presencas (
 CREATE INDEX IF NOT EXISTS idx_presencas_sessao ON presencas(sessao_data);
 CREATE INDEX IF NOT EXISTS idx_presencas_obreiro ON presencas(obreiro_id);
 
+-- Visitantes recebidos em cada sessao ---------------------------------
+-- Nao ha cadastro de visitante: o que a Loja acompanha e quantos
+-- Irmaos de outras Lojas recebeu. Uma linha por data, e nao por pessoa.
+CREATE TABLE IF NOT EXISTS visitantes (
+  sessao_data     TEXT PRIMARY KEY,          -- YYYY-MM-DD, casa com presencas.sessao_data
+  quantidade      INTEGER NOT NULL DEFAULT 0,
+  origem          TEXT,                      -- celular | pc
+  registrado_por  TEXT,
+  registrado_em   TEXT DEFAULT (datetime('now','localtime'))
+);
+
 -- Lancamentos financeiros: Tesouraria e Hospitalaria ------------------
 -- Uma tabela so para as duas areas. Elas tem a mesma forma - entra
 -- dinheiro, sai dinheiro, sobra um saldo - e o que muda sao os rotulos:

@@ -61,6 +61,9 @@ const semFormatacao = (t) => String(t === null || t === undefined ? '' : t)
 function conferencia(pacote) {
   const base = [
     pacote.data,
+    // Os visitantes entram na conta: alterados no caminho, o numero
+    // passaria despercebido se ficasse de fora da conferencia.
+    'v' + (Number(pacote.visitantes) || 0),
     (pacote.itens || []).map((p) => p[0] + ':' + p[1]).join(',')
   ].join('|');
 
@@ -101,6 +104,7 @@ function montar(dados) {
     geradoEm: new Date().toISOString(),
     total: itens.length,
     presentes: itens.filter((p) => p[1]).length,
+    visitantes: Math.max(0, Math.trunc(Number(dados.visitantes) || 0)),
     itens
   };
   pacote.conferencia = conferencia(pacote);
@@ -152,6 +156,7 @@ function paraTexto(pacote, extenso) {
     pacote.chamadaPor ? `Chamada por: ${pacote.chamadaPor}` : '',
     '',
     `Presentes: ${pacote.presentes} de ${pacote.total}`,
+    pacote.visitantes ? `Visitantes: ${pacote.visitantes}` : '',
     '',
     'Código para o CtrLoja do computador (não altere):',
     MARCA_INICIO,

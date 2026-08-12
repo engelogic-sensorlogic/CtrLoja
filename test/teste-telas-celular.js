@@ -263,9 +263,14 @@ for (const fora of ['grupos', 'envios_log', 'controle_disparo']) delete pacote.d
   console.log('\n== Chancelaria: destravada ==');
   ok('a senha certa destrava', !doc.querySelector('#conteudo .cadeado'));
   ok('abas do cargo aparecem',
-    abas().join() === 'Mensagens,Presença,Obreiros,Solicitar', abas().join(' | '));
+    abas().join() === 'Eventos da Semana,Mensagens,Presença,Obreiros,Solicitar', abas().join(' | '));
   ok('o cadeado sai da barra',
     !areas().find((a) => a.includes('Chancelaria')).includes('🔒'));
+  ok('abre em Eventos da Semana', /Semana de /.test(texto()));
+
+  // O disparo vive na aba Mensagens, que agora não é mais a primeira
+  clicarAba('Mensagens');
+  await new Promise((r) => setTimeout(r, 60));
 
   doc.querySelector('#conteudo input[type=date]').value = '2026-08-10';
   doc.querySelector('#conteudo input[type=date]').dispatchEvent(new janela.Event('change', { bubbles: true }));
@@ -311,9 +316,37 @@ for (const fora of ['grupos', 'envios_log', 'controle_disparo']) delete pacote.d
   ok('marcar todos preenche a lista', /2 de 2 presentes/.test(texto()),
     (texto().match(/\d+ de \d+ presentes/) || [''])[0]);
 
+  /* Visitantes: campo numérico logo abaixo da relação de Obreiros. */
+  const numericos = [...doc.querySelectorAll('#conteudo input[type=number]')];
+  ok('há campo numérico de visitantes', numericos.length === 1, String(numericos.length));
+  ok('o campo vem abaixo da lista de Obreiros',
+    numericos[0] && doc.querySelector('#conteudo .chamada-item')
+    && (doc.querySelector('#conteudo .chamada-item').compareDocumentPosition(numericos[0])
+      & janela.Node.DOCUMENT_POSITION_FOLLOWING) !== 0);
+  ok('o campo não aceita número negativo', numericos[0] && numericos[0].getAttribute('min') === '0');
+  ok('explica que visitante não conta na frequência do quadro',
+    /não alterar|sem alterar a frequência/.test(texto()));
+
   ok('oferece envio ao PC pelos dois caminhos',
     botoes().some((b) => /WhatsApp/.test(b)) && botoes().some((b) => /\.presenca/.test(b)),
     botoes().join(' | '));
+  };
+
+  const eventosDaSemana = async () => {
+  console.log('\n== Eventos da Semana (Chancelaria) ==');
+  clicarAba('Eventos da Semana');
+  await new Promise((r) => setTimeout(r, 80));
+
+  ok('declara o intervalo da semana', /Semana de /.test(texto()));
+  ok('vai de segunda a domingo', /até /.test(texto()));
+  ok('avisa que se renova sozinha', /renova sozinha toda segunda-feira/.test(texto()));
+  ok('não oferece envio nem marcação',
+    !botoes().some((b) => /Enviar|WhatsApp/i.test(b))
+    && !doc.querySelector('#conteudo input[type=checkbox]'));
+
+  /* A lista é lida em sessão: a fonte tem de ser maior que a do resto. */
+  ok('usa o estilo de leitura ampliada',
+    !doc.querySelector('#conteudo .evento') || !!doc.querySelector('#conteudo .evento.semana'));
   };
 
   const presencaPublica = async () => {
@@ -363,6 +396,7 @@ for (const fora of ['grupos', 'envios_log', 'controle_disparo']) delete pacote.d
     /Incluir a data de casamento/.test(doc.querySelector('#conteudo pre.mensagem').textContent));
 
   await presencaChancelaria();
+  await eventosDaSemana();
   await presencaPublica();
 
   /* ---- Volta a Início ---- */

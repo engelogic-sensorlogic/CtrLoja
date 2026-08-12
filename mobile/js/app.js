@@ -27,7 +27,7 @@
 
   // Aparece na aba Dados. Serve para conferir, de olho, se o aparelho
   // esta mesmo com a ultima versao publicada do aplicativo.
-  const VERSAO_APP = '2026.08.10-7';
+  const VERSAO_APP = '2026.08.11-8';
 
   const CHAVE = 'ctrloja.pacote';
   const CHAVE_VERSAO = 'ctrloja.versao';
@@ -52,6 +52,7 @@
     chamadaData: null,
     chamadaMarcados: null,
     chamadaPor: '',
+    chamadaVisitantes: null,
     // Mês aberto no extrato de cada área, e quem está lançando
     extratoMes: {},
     lancadoPor: ''
@@ -475,6 +476,90 @@
     return caixa;
   }
 
+  /* --- Chancelaria: Eventos da Semana --- */
+  /*
+     De segunda a domingo da semana corrente, e só. É a lista que o
+     Chanceler lê em sessão, então a fonte é maior: lê-se de pé, com o
+     aparelho longe dos olhos, sob a luz do Templo.
+
+     A semana vira sozinha na segunda-feira, porque o recorte é
+     calculado a partir de hoje — não há nada a renovar à mão.
+  */
+
+  function segundaDaSemana(iso) {
+    const [a, m, d] = iso.split('-').map(Number);
+    const dt = new Date(a, m - 1, d, 12);
+    // getDay(): 0 = domingo. Domingo pertence à semana que começou na
+    // segunda anterior, e não à que vai começar.
+    const desloca = dt.getDay() === 0 ? -6 : 1 - dt.getDay();
+    dt.setDate(dt.getDate() + desloca);
+    return hojeISO(dt);
+  }
+
+  function telaEventosDaSemana() {
+    const caixa = el('div');
+    const hoje = hojeISO();
+    const segunda = segundaDaSemana(hoje);
+    const domingo = somarDias(segunda, 6);
+
+    caixa.appendChild(el('div', { class: 'aviso info' }, [
+      el('div', { text: 'Semana de ' + dataExtenso(segunda) }),
+      el('div', { text: 'até ' + dataExtenso(domingo) })
+    ]));
+
+    const lista = app.nucleo.agenda.eventosDoPeriodo(segunda, domingo);
+    const quantos = lista.reduce((n, dia) => n + dia.eventos.length, 0);
+
+    if (!quantos) {
+      caixa.appendChild(el('div', { class: 'cartao' }, [
+        el('div', { class: 'vazio', text: 'Nenhum evento nesta semana.' })
+      ]));
+      return caixa;
+    }
+
+    const DIAS = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira',
+      'Quinta-feira', 'Sexta-feira', 'Sábado'];
+    const diaDaSemana = (iso) => {
+      const [a, m, d] = iso.split('-').map(Number);
+      return DIAS[new Date(a, m - 1, d, 12).getDay()];
+    };
+
+    for (const dia of lista) {
+      for (const evt of dia.eventos) {
+        const bloco = el('div', { class: 'evento leitura semana' + (evt.bloqueado ? ' bloqueado' : '') }, [
+          el('div', { class: 'evento-topo' }, [
+            el('div', { class: 'evento-data' }, [
+              el('span', { class: 'd', text: dia.data.slice(8, 10) }),
+              el('span', { class: 'm', text: MESES_CURTO[Number(dia.data.slice(5, 7)) - 1] })
+            ]),
+            el('div', { class: 'evento-info' }, [
+              el('strong', { text: (evt.titulo_pessoa ? evt.titulo_pessoa + ' ' : '') + (evt.nome || evt.evento || '') }),
+              el('small', { text: [diaDaSemana(dia.data), evt.rotulo].filter(Boolean).join(' — ') })
+            ]),
+            el('span', { class: 'tag ' + evt.categoria, text: rotuloCategoria(evt.categoria) })
+          ])
+        ]);
+
+        if (evt.categoria === 'sessao' && String(evt.agenda_dia || '').trim()) {
+          bloco.classList.add('com-detalhe');
+          bloco.appendChild(el('div', { class: 'pauta' }, [
+            el('h4', { text: 'Agenda do Dia' }),
+            el('pre', { text: String(evt.agenda_dia).trim() })
+          ]));
+        }
+
+        caixa.appendChild(bloco);
+      }
+    }
+
+    caixa.appendChild(el('p', {
+      class: 'legenda',
+      text: quantos + ' evento(s) nesta semana. A lista se renova sozinha toda segunda-feira.'
+    }));
+
+    return caixa;
+  }
+
   /* --- Chancelaria: Mensagens (com disparo) --- */
 
   function telaMensagens() {
@@ -581,7 +666,14 @@
     return n;
   }
 
-  /** Barras verticais: comparecimento sessão a sessão. */
+  /**
+   * Barras verticais: quantos estiveram no Templo, sessão a sessão.
+   *
+   * Conta PESSOAS, não porcentagem — o visitante não tem denominador,
+   * porque não pertence ao quadro. Em contagem, a barra responde à
+   * pergunta que a Loja faz de verdade: quantos estiveram presentes
+   * naquela noite, nossos e visitantes.
+   */
   function graficoSessoes(linhas) {
     const dados = linhas.slice(-12);              // últimas doze cabem na tela
     if (!dados.length) return null;
@@ -592,25 +684,38 @@
 
     const g = svg('svg', { viewBox: `0 0 ${L} ${A}`, class: 'grafico', role: 'img' });
 
+    const maior = Math.max(1, ...dados.map((d) => (d.presentes || 0) + (d.visitantes || 0)));
+    const alt = (n) => (n / maior) * (base - topo);
+
     // Linha da média, para dar referência ao olho
-    const media = dados.reduce((s, d) => s + d.percentual, 0) / dados.length;
-    const yMedia = base - (media / 100) * (base - topo);
+    const media = dados.reduce((s, d) => s + (d.presentes || 0), 0) / dados.length;
     g.appendChild(svg('line', {
-      x1: 0, y1: yMedia, x2: L, y2: yMedia,
+      x1: 0, y1: base - alt(media), x2: L, y2: base - alt(media),
       stroke: 'var(--c-acento)', 'stroke-width': 1, 'stroke-dasharray': '4 3', opacity: '.5'
     }));
 
     dados.forEach((d, i) => {
-      const altura = Math.max(2, (d.percentual / 100) * (base - topo));
       const x = i * largura + (largura - barra) / 2;
+      const hP = Math.max(2, alt(d.presentes || 0));
+      const visitantes = d.visitantes || 0;
+      const hV = visitantes ? Math.max(2, alt(visitantes)) : 0;
+
+      if (visitantes) {
+        g.appendChild(svg('rect', {
+          x, y: base - hP - hV, width: barra, height: hV, rx: 3, fill: '#8E44AD'
+        }));
+      }
+
       g.appendChild(svg('rect', {
-        x, y: base - altura, width: barra, height: altura, rx: 3,
-        fill: d.percentual >= media ? 'var(--c-acento)' : '#8FC4DA'
+        x, y: base - hP, width: barra, height: hP, rx: 3,
+        fill: (d.presentes || 0) >= media ? 'var(--c-acento)' : '#8FC4DA'
       }));
+
       g.appendChild(svg('text', {
-        x: x + barra / 2, y: base - altura - 3, 'text-anchor': 'middle',
+        x: x + barra / 2, y: base - hP - hV - 3, 'text-anchor': 'middle',
         'font-size': '8', fill: 'var(--c-texto-suave)'
-      }, [document.createTextNode(String(d.presentes))]));
+      }, [document.createTextNode(visitantes ? `${d.presentes}+${visitantes}` : String(d.presentes))]));
+
       g.appendChild(svg('text', {
         x: x + barra / 2, y: A - 6, 'text-anchor': 'middle',
         'font-size': '8', fill: 'var(--c-texto-suave)'
@@ -661,6 +766,10 @@
       el('div', { class: 'metrica' }, [
         el('div', { class: 'valor', text: est.percentual_medio + '%' }),
         el('div', { class: 'rotulo', text: 'Comparecimento' })
+      ]),
+      el('div', { class: 'metrica' }, [
+        el('div', { class: 'valor', text: String(est.total_visitantes) }),
+        el('div', { class: 'rotulo', text: 'Visitantes' })
       ])
     ]));
 
@@ -669,10 +778,20 @@
       caixa.appendChild(el('div', { class: 'cartao' }, [
         el('h2', { text: 'Comparecimento por sessão' }),
         grafico,
+        el('div', { class: 'legenda-cores' }, [
+          el('span', { class: 'legenda-item' }, [
+            el('i', { style: 'background:var(--c-acento)' }),
+            document.createTextNode('Irmãos do quadro')
+          ]),
+          el('span', { class: 'legenda-item' }, [
+            el('i', { style: 'background:#8E44AD' }),
+            document.createTextNode('Visitantes')
+          ])
+        ]),
         el('p', {
           class: 'legenda',
-          text: 'Cada barra é uma sessão; o número acima é quantos Irmãos compareceram. '
-            + 'A linha tracejada marca a média do período.'
+          text: 'Cada barra é uma sessão; o número acima é quantos estiveram no Templo. '
+            + 'A linha tracejada marca a média de presentes do quadro.'
         })
       ]));
     }
@@ -739,6 +858,7 @@
       }
       app.chamadaData = data;
       app.chamadaMarcados = null;
+      app.chamadaVisitantes = null;
       pintar();
     };
 
@@ -783,6 +903,19 @@
       value: app.chamadaPor || ''
     });
     responsavel.addEventListener('input', () => { app.chamadaPor = responsavel.value; });
+
+    /* Visitantes: Irmãos de outras Lojas. Não há cadastro deles — a
+       Loja acompanha quantos recebeu, não quem foram. */
+    if (app.chamadaVisitantes === null || app.chamadaVisitantes === undefined) {
+      app.chamadaVisitantes = lista.visitantes || 0;
+    }
+    const campoVisitantes = el('input', {
+      type: 'number', class: 'campo-largo', min: '0', step: '1', inputmode: 'numeric',
+      value: String(app.chamadaVisitantes)
+    });
+    campoVisitantes.addEventListener('input', () => {
+      app.chamadaVisitantes = Math.max(0, Math.trunc(Number(campoVisitantes.value) || 0));
+    });
 
     caixa.appendChild(el('div', { class: 'cartao' }, [
       el('h2', { text: 'Lista de Presença' }),
@@ -872,6 +1005,20 @@
     atualizarContador();
     caixa.appendChild(cartaoLista);
 
+    /* Logo abaixo da lista, como pedido: quantos visitantes a Loja
+       recebeu naquela noite. */
+    caixa.appendChild(el('div', { class: 'cartao' }, [
+      el('label', { class: 'campo-mobile' }, [
+        el('span', { text: 'Visitantes na sessão' }),
+        campoVisitantes,
+        el('small', {
+          style: 'display:block;font-size:11px;color:var(--c-texto-suave);margin-top:4px',
+          text: 'Irmãos de outras Lojas. Entram no histórico do Templo, '
+            + 'sem alterar a frequência do nosso quadro.'
+        })
+      ])
+    ]));
+
     /* --- fechamento: volta ao PC Mestre --- */
 
     function montarPacote() {
@@ -882,6 +1029,7 @@
         tipo: lista.tipo,
         loja: cfg.loja_nome || '',
         chamadaPor: (app.chamadaPor || '').trim() || null,
+        visitantes: app.chamadaVisitantes || 0,
         itens: lista.itens.map((i) => ({
           obreiro_id: i.obreiro_id,
           presente: !!app.chamadaMarcados[i.obreiro_id]
@@ -1742,6 +1890,8 @@
         alvo.appendChild(telaFinancasPublicas());
       } else if (app.aba === 'chamada') {
         alvo.appendChild(telaChamada());
+      } else if (app.aba === 'semana') {
+        alvo.appendChild(telaEventosDaSemana());
       } else if (app.aba === 'agenda') {
         alvo.appendChild(telaAgendaSecretaria(area));
       } else if (app.aba === 'extrato') {

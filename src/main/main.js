@@ -345,6 +345,12 @@ handle('presenca:salvar', (reg) => {
     );
   }
   const r = db.presencas.registrarLista(Object.assign({ origem: 'pc' }, reg));
+  db.presencas.registrarVisitantes({
+    sessao_data: reg.sessao_data,
+    quantidade: reg.visitantes,
+    origem: reg.origem || 'pc',
+    registrado_por: reg.registrado_por || null
+  });
   return Object.assign(r, { lista: presenca.listaDaSessao(reg.sessao_data) });
 });
 
@@ -401,6 +407,8 @@ handle('presenca:ler-pacote', async (origem, conteudo) => {
     pacote,
     itens,
     sessao: sessao || null,
+    visitantes: Number(pacote.visitantes) || 0,
+    visitantes_antes: db.presencas.visitantesDe(pacote.data),
     ja_existia: anterior.size > 0,
     desconhecidos: itens.filter((i) => i.desconhecido).length,
     mudancas: itens.filter((i) => i.mudou).length

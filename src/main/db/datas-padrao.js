@@ -54,6 +54,31 @@ module.exports = [
   { chave: 'nac_consciencia_negra', categoria: 'data_nacional', titulo: 'Dia da Consciencia Negra', tipo: 'fixa', dia: 20, mes: 11 },
   { chave: 'nac_reveillon', categoria: 'data_nacional', titulo: 'Ultimo dia do ano', tipo: 'fixa', dia: 31, mes: 12 },
 
+  /* ================= DIAS DAS PROFISSOES =================
+     Costume da Loja lembra-las na fala do Chanceler. Sao muitos
+     Irmaos de profissoes diferentes, e esquecer a data de um deles
+     pesa mais do que citar uma a mais.
+
+     Entram como data_nacional para acompanharem o mesmo modelo de
+     mensagem das demais datas comemorativas. Nao havendo Irmao da
+     profissao, basta desligar a data em Calendario.               */
+  { chave: 'prof_farmaceutico', categoria: 'data_nacional', titulo: 'Dia do Farmaceutico', tipo: 'fixa', dia: 20, mes: 1 },
+  { chave: 'prof_jornalista', categoria: 'data_nacional', titulo: 'Dia do Jornalista', tipo: 'fixa', dia: 7, mes: 4 },
+  { chave: 'prof_enfermeiro', categoria: 'data_nacional', titulo: 'Dia do Enfermeiro', tipo: 'fixa', dia: 12, mes: 5 },
+  { chave: 'prof_advogado', categoria: 'data_nacional', titulo: 'Dia do Advogado', tipo: 'fixa', dia: 11, mes: 8 },
+  { chave: 'prof_psicologo', categoria: 'data_nacional', titulo: 'Dia do Psicologo', tipo: 'fixa', dia: 27, mes: 8 },
+  { chave: 'prof_contador', categoria: 'data_nacional', titulo: 'Dia do Contador', tipo: 'fixa', dia: 22, mes: 9 },
+  { chave: 'prof_agronomo', categoria: 'data_nacional', titulo: 'Dia do Engenheiro Agronomo', tipo: 'fixa', dia: 12, mes: 10 },
+  { chave: 'prof_fisioterapeuta', categoria: 'data_nacional', titulo: 'Dia do Fisioterapeuta e do Terapeuta Ocupacional', tipo: 'fixa', dia: 13, mes: 10 },
+  { chave: 'prof_professor', categoria: 'data_nacional', titulo: 'Dia do Professor', tipo: 'fixa', dia: 15, mes: 10 },
+  { chave: 'prof_eng_alimentos', categoria: 'data_nacional', titulo: 'Dia do Engenheiro de Alimentos', tipo: 'fixa', dia: 16, mes: 10 },
+  { chave: 'prof_medico', categoria: 'data_nacional', titulo: 'Dia do Medico', tipo: 'fixa', dia: 18, mes: 10 },
+  { chave: 'prof_ti', categoria: 'data_nacional', titulo: 'Dia do Profissional de Tecnologia da Informacao', tipo: 'fixa', dia: 19, mes: 10 },
+  { chave: 'prof_dentista', categoria: 'data_nacional', titulo: 'Dia do Dentista', tipo: 'fixa', dia: 25, mes: 10 },
+  { chave: 'prof_eng_civil', categoria: 'data_nacional', titulo: 'Dia do Engenheiro Civil', tipo: 'fixa', dia: 25, mes: 10 },
+  { chave: 'prof_eng_agricola', categoria: 'data_nacional', titulo: 'Dia do Engenheiro Agricola', tipo: 'fixa', dia: 27, mes: 10 },
+  { chave: 'prof_engenheiro', categoria: 'data_nacional', titulo: 'Dia do Engenheiro', descricao: 'Instituido pelo Decreto-Lei 23.569, de 11 de dezembro de 1933, que regulamentou as profissoes de Engenheiro, Arquiteto e Agrimensor.', ano_origem: 1933, tipo: 'fixa', dia: 11, mes: 12 },
+
   /* ================= EFEMERIDES HISTORICAS GERAIS ================= */
   { chave: 'efe_abolicao', categoria: 'efemeride', titulo: 'Abolicao da Escravatura no Brasil (Lei Aurea)', ano_origem: 1888, tipo: 'fixa', dia: 13, mes: 5 },
   { chave: 'efe_fim_2gm_europa', categoria: 'efemeride', titulo: 'Fim da Segunda Guerra Mundial na Europa', ano_origem: 1945, tipo: 'fixa', dia: 8, mes: 5 },

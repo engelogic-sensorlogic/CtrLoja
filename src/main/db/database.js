@@ -565,7 +565,51 @@ const presencas = {
 
   limparSessao(data) {
     getConn().prepare('DELETE FROM presencas WHERE sessao_data = ?').run(data);
+    getConn().prepare('DELETE FROM visitantes WHERE sessao_data = ?').run(data);
     return true;
+  },
+
+  /* ---------------- visitantes da sessao ---------------- */
+  /*
+   * Nao ha cadastro de visitante: a Loja acompanha QUANTOS Irmaos de
+   * outras Lojas recebeu. Uma linha por data, e nao por pessoa.
+   */
+
+  visitantesTodos() {
+    return getConn().prepare('SELECT * FROM visitantes ORDER BY sessao_data').all();
+  },
+
+  visitantesDe(data) {
+    const l = getConn().prepare('SELECT quantidade FROM visitantes WHERE sessao_data = ?').get(data);
+    return l ? Number(l.quantidade) || 0 : 0;
+  },
+
+  registrarVisitantes(reg) {
+    if (!reg || !reg.sessao_data) throw new Error('Informe a data da sessão.');
+    const qtd = Math.max(0, Math.trunc(Number(reg.quantidade) || 0));
+
+    // Zero visitantes nao merece linha: a ausencia ja diz o mesmo, e
+    // evita encher a tabela de registros sem informacao.
+    if (!qtd) {
+      getConn().prepare('DELETE FROM visitantes WHERE sessao_data = ?').run(reg.sessao_data);
+      return { sessao_data: reg.sessao_data, quantidade: 0 };
+    }
+
+    getConn().prepare(`
+      INSERT INTO visitantes (sessao_data, quantidade, origem, registrado_por)
+      VALUES (@sessao_data, @quantidade, @origem, @registrado_por)
+      ON CONFLICT(sessao_data) DO UPDATE SET
+        quantidade = excluded.quantidade,
+        origem = excluded.origem,
+        registrado_por = excluded.registrado_por,
+        registrado_em = datetime('now','localtime')
+    `).run({
+      sessao_data: reg.sessao_data,
+      quantidade: qtd,
+      origem: reg.origem || 'pc',
+      registrado_por: reg.registrado_por || null
+    });
+    return { sessao_data: reg.sessao_data, quantidade: qtd };
   }
 };
 

@@ -124,6 +124,7 @@ const pct = pacoteMod.montar({
   grau: 'Mestre', tipo: 'Magna',
   loja: 'A∴R∴L∴S∴ União Fraternal Rolandense nº 141',
   chamadaPor: 'Ir∴ Chanceler',
+  visitantes: 4,
   itens: marcados
 });
 
@@ -135,6 +136,14 @@ const textoPct = JSON.stringify(pct);
 ok('NENHUM nome de Irmão vai no pacote',
   !IRMAOS.some(([nome]) => textoPct.includes(nome)), 'só ids e 0/1');
 ok('a conferência acompanha o pacote', typeof pct.conferencia === 'string' && pct.conferencia.length === 8);
+ok('os visitantes vão no pacote', pct.visitantes === 4);
+
+/* Numero de visitantes alterado no caminho tem de ser pego: se ficasse
+   fora da conferencia, passaria em silencio. */
+const visitaTrocada = JSON.parse(JSON.stringify(pct));
+visitaTrocada.visitantes = 40;
+try { pacoteMod.validar(visitaTrocada); ok('visitantes alterados são detectados', false); }
+catch (e) { ok('visitantes alterados são detectados', /conferência não bate/i.test(e.message)); }
 
 /* --- ida e volta pelo WhatsApp --- */
 
@@ -231,6 +240,37 @@ const comIntruso = db.presencas.registrarLista({
 ok('id desconhecido é ignorado, não quebra', comIntruso.ignorados === 1 && comIntruso.presentes === 1);
 
 /* ------------------------------------------------------------------ */
+/* 3b. Visitantes                                                      */
+/* ------------------------------------------------------------------ */
+
+console.log('\n== Visitantes recebidos ==');
+
+ok('sem registro, nenhum visitante', presenca.listaDaSessao('2026-08-10').visitantes === 0);
+
+db.presencas.registrarVisitantes({ sessao_data: '2026-08-10', quantidade: 5, origem: 'pc' });
+ok('visitantes gravados', presenca.listaDaSessao('2026-08-10').visitantes === 5);
+
+db.presencas.registrarVisitantes({ sessao_data: '2026-08-10', quantidade: 7, origem: 'celular' });
+ok('regravar substitui, não soma', presenca.listaDaSessao('2026-08-10').visitantes === 7);
+ok('não duplica a linha', db.presencas.visitantesTodos().length === 1);
+
+/* Visitante nao pertence ao quadro: nao pode inflar a frequencia dos
+   nossos, senao a Loja pareceria mais assidua do que e. */
+const comVisita = presenca.listaDaSessao('2026-08-10');
+ok('não entra no total do quadro', comVisita.total === 5, String(comVisita.total));
+ok('não entra nos presentes', comVisita.presentes === 4, String(comVisita.presentes));
+ok('não altera o percentual', comVisita.percentual === 80, String(comVisita.percentual));
+
+db.presencas.registrarVisitantes({ sessao_data: '2026-08-10', quantidade: 0 });
+ok('zero não guarda linha à toa', db.presencas.visitantesTodos().length === 0);
+db.presencas.registrarVisitantes({ sessao_data: '2026-08-10', quantidade: -3 });
+ok('número negativo vira zero', db.presencas.visitantesDe('2026-08-10') === 0);
+db.presencas.registrarVisitantes({ sessao_data: '2026-08-10', quantidade: 2.7 });
+ok('fração é truncada', db.presencas.visitantesDe('2026-08-10') === 2);
+
+db.presencas.registrarVisitantes({ sessao_data: '2026-08-10', quantidade: 3, origem: 'pc' });
+
+/* ------------------------------------------------------------------ */
 /* 4. Estatisticas                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -265,6 +305,32 @@ ok('Zacarias só na primeira', zacarias.presencas === 1 && zacarias.percentual =
 ok('lista ordenada do mais assíduo ao menos',
   est.obreiros[0].percentual >= est.obreiros[est.obreiros.length - 1].percentual);
 ok('Adormecido fora das estatísticas', !est.obreiros.some((o) => o.nome === 'Antônio Adormecido'));
+
+console.log('\n== Visitantes na série histórica ==');
+
+/* Retrato ANTES de receber a visita: é contra ele que se confere que a
+   frequência do quadro não se mexeu. */
+const antesDaVisita = presenca.estatisticas({});
+
+db.presencas.registrarVisitantes({ sessao_data: '2026-08-17', quantidade: 2, origem: 'pc' });
+const comVis = presenca.estatisticas({});
+const s10 = comVis.sessoes.find((s) => s.data === '2026-08-10');
+
+ok('a série carrega os visitantes de cada sessão', s10.visitantes === 3, String(s10.visitantes));
+ok('e quantos estiveram no Templo', s10.no_templo === s10.presentes + 3, String(s10.no_templo));
+ok('sessão sem visitante fica em zero',
+  comVis.sessoes.find((s) => s.data === '2026-08-03').visitantes === 0);
+ok('total de visitantes do período', comVis.total_visitantes === 5, String(comVis.total_visitantes));
+ok('média por sessão', comVis.media_visitantes === 1.7, String(comVis.media_visitantes));
+ok('quantas sessões receberam visita', comVis.sessoes_com_visita === 2, String(comVis.sessoes_com_visita));
+ok('a sessão mais visitada', comVis.melhor_visita.data === '2026-08-10');
+
+/* A conta do quadro nao pode ter mudado com a chegada dos visitantes. */
+ok('média de presentes intacta', comVis.media_presentes === antesDaVisita.media_presentes,
+  `${comVis.media_presentes} vs ${antesDaVisita.media_presentes}`);
+ok('comparecimento médio intacto', comVis.percentual_medio === antesDaVisita.percentual_medio);
+ok('frequência dos Irmãos intacta',
+  JSON.stringify(comVis.obreiros) === JSON.stringify(antesDaVisita.obreiros));
 
 const historico = presenca.historicoDoObreiro(ids[4]);
 ok('histórico individual em ordem', historico.map((h) => h.data).join() === '2026-08-03,2026-08-10,2026-08-17');
@@ -525,6 +591,53 @@ ok('gráfico com uma sessão só funciona',
   /<svg/.test(pdf.graficoSvg([{ data: '2026-08-10', percentual: 60, presentes: 3, grau: 'Mestre' }])));
 
 /* ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------ */
+/* 9. Dias das profissões no calendário permanente                     */
+/* ------------------------------------------------------------------ */
+
+console.log('\n== Dias das profissões ==');
+
+const datasPadrao = require(path.join(DIR_MAIN, 'db', 'datas-padrao.js'));
+const profissoes = datasPadrao.filter((d) => String(d.chave).startsWith('prof_'));
+
+ok('as profissões entraram no calendário', profissoes.length >= 15, String(profissoes.length));
+
+/* Datas conferidas antes de entrar. Sao lidas em sessao pelo Chanceler:
+   errar uma delas seria pior do que nao ter nenhuma. */
+const CONFERIDAS = [
+  ['prof_engenheiro', 11, 12, 'Engenheiro'],
+  ['prof_medico', 18, 10, 'Médico'],
+  ['prof_agronomo', 12, 10, 'Engenheiro Agrônomo'],
+  ['prof_advogado', 11, 8, 'Advogado'],
+  ['prof_professor', 15, 10, 'Professor'],
+  ['prof_enfermeiro', 12, 5, 'Enfermeiro'],
+  ['prof_contador', 22, 9, 'Contador'],
+  ['prof_dentista', 25, 10, 'Dentista'],
+  ['prof_farmaceutico', 20, 1, 'Farmacêutico'],
+  ['prof_jornalista', 7, 4, 'Jornalista'],
+  ['prof_psicologo', 27, 8, 'Psicólogo']
+];
+
+for (const [chave, dia, mes, nome] of CONFERIDAS) {
+  const d = profissoes.find((x) => x.chave === chave);
+  ok(`Dia do ${nome}: ${dia}/${mes}`, !!d && d.dia === dia && d.mes === mes,
+    d ? `${d.dia}/${d.mes}` : 'ausente');
+}
+
+ok('todas são datas fixas', profissoes.every((d) => d.tipo === 'fixa'));
+ok('todas têm dia e mês válidos',
+  profissoes.every((d) => d.dia >= 1 && d.dia <= 31 && d.mes >= 1 && d.mes <= 12));
+ok('todas entram como data comemorativa',
+  profissoes.every((d) => d.categoria === 'data_nacional'));
+ok('nenhuma chave repetida no calendário inteiro',
+  new Set(datasPadrao.map((d) => d.chave)).size === datasPadrao.length);
+
+/* Duas profissoes podem cair no mesmo dia - Dentista e Engenheiro Civil
+   sao ambas em 25 de outubro. Isso e correto, e as duas devem sair. */
+const em2510 = profissoes.filter((d) => d.dia === 25 && d.mes === 10);
+ok('duas profissões no mesmo dia convivem', em2510.length === 2,
+  em2510.map((d) => d.titulo).join(' + '));
 
 console.log('\n' + (falhas ? ('FALHAS: ' + falhas) : 'CICLO DA LISTA DE PRESENÇA VALIDADO'));
 process.exit(falhas ? 1 : 0);

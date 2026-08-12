@@ -97,6 +97,11 @@ function listaDaSessao(data) {
     itens,
     total: itens.length,
     presentes,
+    // Visitantes nao entram na conta do quadro: sao Irmaos de outras
+    // Lojas. Contam para o movimento da sessao, nao para a frequencia
+    // dos nossos - misturar os dois faria a Loja parecer mais assidua
+    // do que e.
+    visitantes: db.presencas.visitantesDe ? db.presencas.visitantesDe(data) : 0,
     ausentes: itens.length - presentes,
     percentual: porcentagem(presentes, itens.length),
     tem_chamada: marcados.size > 0
@@ -179,6 +184,7 @@ function comparecimentoPorSessao(filtro) {
 
     const s = db.sessoes.obterPorData(data);
     const presentes = registros.filter((p) => Number(p.presente)).length;
+    const visitantes = db.presencas.visitantesDe ? db.presencas.visitantesDe(data) : 0;
 
     linhas.push({
       data,
@@ -187,6 +193,9 @@ function comparecimentoPorSessao(filtro) {
       rotulo: rotuloSessao(s),
       total: registros.length,
       presentes,
+      visitantes,
+      // Quantos estiveram no Templo, nossos e visitantes juntos
+      no_templo: presentes + visitantes,
       ausentes: registros.length - presentes,
       percentual: porcentagem(presentes, registros.length)
     });
@@ -265,12 +274,26 @@ function estatisticas(filtro) {
 
   const ordenadas = sessoes.slice().sort((a, b) => b.percentual - a.percentual);
 
+  const totalVisitantes = sessoes.reduce((n, s) => n + (s.visitantes || 0), 0);
+  const comVisita = sessoes.filter((s) => (s.visitantes || 0) > 0);
+
   return {
     sessoes,
     obreiros,
     total_sessoes: sessoes.length,
     media_presentes: media,
     percentual_medio: porcentagem(totalPresencas, totalLugares),
+
+    /* Visitantes contados a parte: sao Irmaos de outras Lojas, e entram
+       no movimento do Templo sem alterar a frequencia dos nossos. */
+    total_visitantes: totalVisitantes,
+    media_visitantes: sessoes.length
+      ? Math.round((totalVisitantes / sessoes.length) * 10) / 10
+      : 0,
+    sessoes_com_visita: comVisita.length,
+    melhor_visita: comVisita.length
+      ? comVisita.slice().sort((a, b) => b.visitantes - a.visitantes)[0]
+      : null,
     melhor: ordenadas[0] || null,
     pior: ordenadas.length > 1 ? ordenadas[ordenadas.length - 1] : null,
     ultima: sessoes.length ? sessoes[sessoes.length - 1] : null,

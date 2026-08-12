@@ -204,11 +204,26 @@ App.views.presenca = {
         card.appendChild(el('table', {}, [corpo]));
       }
 
+      /* Visitantes: Irmãos de outras Lojas. Não há cadastro deles —
+         a Loja acompanha quantos recebeu, não quem foram. */
+      const inVisitantes = el('input', {
+        type: 'number', min: '0', step: '1', value: String(lista.visitantes || 0),
+        style: 'max-width:120px'
+      });
+
       const responsavel = el('input', {
         type: 'text', placeholder: 'Quem fez a chamada (opcional)', style: 'max-width:320px'
       });
-      card.appendChild(el('label', { class: 'campo', style: 'margin-top:12px' }, [
-        el('span', { text: 'Registrado por' }), responsavel
+
+      card.appendChild(el('div', { class: 'linha', style: 'margin-top:12px' }, [
+        el('label', { class: 'campo' }, [
+          el('span', { text: 'Visitantes na sessão' }), inVisitantes,
+          el('small', {
+            style: 'color:var(--c-texto-suave);font-size:11px',
+            text: 'Irmãos de outras Lojas. Não entram na frequência do quadro.'
+          })
+        ]),
+        el('label', { class: 'campo' }, [el('span', { text: 'Registrado por' }), responsavel])
       ]));
 
       card.appendChild(el('div', { class: 'linha compacta', style: 'margin-top:10px' }, [
@@ -218,10 +233,12 @@ App.views.presenca = {
             const r = await tentar(window.api.presenca.salvar({
               sessao_data: lista.data,
               registrado_por: responsavel.value.trim() || null,
+              visitantes: Number(inVisitantes.value) || 0,
               itens: lista.itens.map((i) => ({ obreiro_id: i.obreiro_id, presente: !!marcados[i.obreiro_id] }))
             }), 'Falha ao gravar a chamada');
             if (!r) return;
-            toast(`Chamada gravada: ${r.presentes} presentes, ${r.ausentes} ausentes.`, 'ok', 6000);
+            toast(`Chamada gravada: ${r.presentes} presentes, ${r.ausentes} ausentes`
+              + (Number(inVisitantes.value) ? `, ${Number(inVisitantes.value)} visitante(s).` : '.'), 'ok', 6000);
             sessoes = await tentar(window.api.presenca.sessoes(120)) || sessoes;
             carregar();
           }
@@ -266,7 +283,8 @@ App.views.presenca = {
         metrica(est.total_sessoes, 'Sessões com chamada'),
         metrica(est.media_presentes, 'Média de presentes'),
         metrica(est.percentual_medio + '%', 'Comparecimento médio'),
-        metrica(est.quadro, 'Obreiros no quadro')
+        metrica(est.quadro, 'Obreiros no quadro'),
+        metrica(est.total_visitantes, 'Visitantes recebidos')
       ]));
 
       card.appendChild(graficoBarras(est.sessoes));
@@ -296,48 +314,77 @@ App.views.presenca = {
     /** Barras verticais, uma por sessão, com a linha da média. */
     function graficoBarras(linhas) {
       const dados = linhas.slice(-24);
-      const L = 900, A = 240, base = A - 34, topo = 16;
-      const larg = L / Math.max(dados.length, 1);
+      const L = 900, A = 250, base = A - 40, topo = 16, esq = 34;
+      const larg = (L - esq) / Math.max(dados.length, 1);
       const barra = Math.min(larg * 0.62, 34);
 
       const g = svgEl('svg', {
         viewBox: `0 0 ${L} ${A}`, style: 'width:100%;height:auto;display:block'
       });
 
-      // Réguas de 25 em 25 por cento
-      for (const pct of [25, 50, 75, 100]) {
-        const y = base - (pct / 100) * (base - topo);
+      /*
+       * O gráfico conta PESSOAS, não porcentagem.
+       *
+       * Era percentual, e ficaria incoerente empilhar visitantes sobre
+       * ele: o visitante não tem denominador — não pertence ao quadro.
+       * Em contagem, a barra passa a responder à pergunta que a Loja
+       * faz de verdade: quantos estiveram no Templo naquela noite.
+       * O percentual continua no detalhe, ao passar o mouse.
+       */
+      const maior = Math.max(1, ...dados.map((d) => (d.presentes || 0) + (d.visitantes || 0)));
+      const passo = Math.max(1, Math.ceil(maior / 4));
+      const alt = (n) => (n / maior) * (base - topo);
+
+      for (let n = passo; n <= maior; n += passo) {
+        const y = base - alt(n);
         g.appendChild(svgEl('line', {
-          x1: 26, y1: y, x2: L, y2: y, stroke: '#A9D4D0', 'stroke-width': 1, opacity: '.6'
+          x1: esq, y1: y, x2: L, y2: y, stroke: '#A9D4D0', 'stroke-width': 1, opacity: '.6'
         }));
         g.appendChild(svgEl('text', {
-          x: 22, y: y + 3, 'text-anchor': 'end', 'font-size': '9', fill: '#4A6168'
-        }, [document.createTextNode(pct + '%')]));
+          x: esq - 5, y: y + 3, 'text-anchor': 'end', 'font-size': '9', fill: '#4A6168'
+        }, [document.createTextNode(String(n))]));
       }
 
-      const media = dados.reduce((s, d) => s + d.percentual, 0) / (dados.length || 1);
-      const yM = base - (media / 100) * (base - topo);
+      const media = dados.reduce((s, d) => s + (d.presentes || 0), 0) / (dados.length || 1);
       g.appendChild(svgEl('line', {
-        x1: 26, y1: yM, x2: L, y2: yM,
+        x1: esq, y1: base - alt(media), x2: L, y2: base - alt(media),
         stroke: '#008CCC', 'stroke-width': 1.5, 'stroke-dasharray': '6 4'
       }));
 
       dados.forEach((d, i) => {
-        const alt = Math.max(2, (d.percentual / 100) * (base - topo));
-        const x = 26 + i * ((L - 26) / dados.length) + (((L - 26) / dados.length) - barra) / 2;
+        const x = esq + i * larg + (larg - barra) / 2;
+        const hP = Math.max(2, alt(d.presentes || 0));
+        const visitantes = d.visitantes || 0;
+        const hV = visitantes ? Math.max(2, alt(visitantes)) : 0;
 
-        const ret = svgEl('rect', {
-          x, y: base - alt, width: barra, height: alt, rx: 3,
-          fill: d.percentual >= media ? '#008CCC' : '#8FC4DA'
+        const detalhe = `${dataExtensoPresenca(d.data)}\n${d.rotulo || ''}\n`
+          + `${d.presentes} de ${d.total} do quadro (${d.percentual}%)`
+          + (visitantes ? `\n${visitantes} visitante(s) — ${d.no_templo} no Templo` : '');
+
+        /* Visitantes empilhados por cima, na mesma escala de pessoas. */
+        if (visitantes) {
+          const rv = svgEl('rect', {
+            x, y: base - hP - hV, width: barra, height: hV, rx: 3, fill: '#8E44AD'
+          });
+          rv.appendChild(svgEl('title', {}, [document.createTextNode(detalhe)]));
+          g.appendChild(rv);
+          g.appendChild(svgEl('text', {
+            x: x + barra / 2, y: base - hP - hV - 4, 'text-anchor': 'middle',
+            'font-size': '9', fill: '#8E44AD', 'font-weight': '700'
+          }, [document.createTextNode('+' + visitantes)]));
+        }
+
+        const rp = svgEl('rect', {
+          x, y: base - hP, width: barra, height: hP, rx: 3,
+          fill: (d.presentes || 0) >= media ? '#008CCC' : '#8FC4DA'
         });
-        ret.appendChild(svgEl('title', {}, [document.createTextNode(
-          `${dataExtensoPresenca(d.data)}\n${d.rotulo || ''}\n${d.presentes} de ${d.total} (${d.percentual}%)`
-        )]));
-        g.appendChild(ret);
+        rp.appendChild(svgEl('title', {}, [document.createTextNode(detalhe)]));
+        g.appendChild(rp);
 
         g.appendChild(svgEl('text', {
-          x: x + barra / 2, y: base - alt - 4, 'text-anchor': 'middle',
-          'font-size': '10', fill: '#10262B', 'font-weight': '600'
+          x: x + barra / 2, y: base - hP + (hP > 16 ? 13 : -4), 'text-anchor': 'middle',
+          'font-size': '10', 'font-weight': '600',
+          fill: hP > 16 ? '#FFFFFF' : '#10262B'
         }, [document.createTextNode(String(d.presentes))]));
 
         g.appendChild(svgEl('text', {
@@ -345,14 +392,15 @@ App.views.presenca = {
         }, [document.createTextNode(d.data.slice(8, 10) + '/' + d.data.slice(5, 7))]));
       });
 
-      g.appendChild(svgEl('line', { x1: 26, y1: base, x2: L, y2: base, stroke: '#10262B', 'stroke-width': 1 }));
+      g.appendChild(svgEl('line', { x1: esq, y1: base, x2: L, y2: base, stroke: '#10262B', 'stroke-width': 1 }));
 
       const caixa = el('div');
       caixa.appendChild(g);
       caixa.appendChild(el('p', {
         style: 'font-size:12px;color:var(--c-texto-suave);margin:6px 0 0',
-        text: 'Cada barra é uma sessão com chamada registrada; o número acima é quantos Irmãos '
-          + 'compareceram. A linha tracejada marca a média do período. Passe o mouse para ver o detalhe.'
+        html: '<span style="color:#008CCC">\u25A0</span> Irmãos do quadro &nbsp; '
+          + '<span style="color:#8E44AD">\u25A0</span> visitantes de outras Lojas &nbsp;·&nbsp; '
+          + 'a linha tracejada marca a média de presentes. Passe o mouse para ver o detalhe.'
       }));
       return caixa;
     }
