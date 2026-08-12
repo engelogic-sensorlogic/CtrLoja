@@ -14,7 +14,7 @@
    publicada; sem internet, usa a última que guardou.
    ================================================================== */
 
-const VERSAO = 'ctrloja-mobile-v9';
+const VERSAO = 'ctrloja-mobile-v10';
 
 const ARQUIVOS = [
   './',

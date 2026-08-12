@@ -27,7 +27,7 @@
 
   // Aparece na aba Dados. Serve para conferir, de olho, se o aparelho
   // esta mesmo com a ultima versao publicada do aplicativo.
-  const VERSAO_APP = '2026.08.11-8';
+  const VERSAO_APP = '2026.08.11-9';
 
   const CHAVE = 'ctrloja.pacote';
   const CHAVE_VERSAO = 'ctrloja.versao';
@@ -482,9 +482,17 @@
      Chanceler lê em sessão, então a fonte é maior: lê-se de pé, com o
      aparelho longe dos olhos, sob a luz do Templo.
 
+     A sessão da Loja NÃO entra aqui. Ela já está diante de todos —
+     quem ouve a leitura está justamente na sessão. O que se lê são as
+     efemérides e as datas dos Irmãos e das famílias.
+
      A semana vira sozinha na segunda-feira, porque o recorte é
      calculado a partir de hoje — não há nada a renovar à mão.
   */
+
+  // Tudo menos a sessão da Loja
+  const CATEGORIAS_DA_SEMANA = ['obreiro', 'familiar', 'maconica',
+    'feriado_religioso', 'data_nacional', 'efemeride'];
 
   function segundaDaSemana(iso) {
     const [a, m, d] = iso.split('-').map(Number);
@@ -507,7 +515,13 @@
       el('div', { text: 'até ' + dataExtenso(domingo) })
     ]));
 
-    const lista = app.nucleo.agenda.eventosDoPeriodo(segunda, domingo);
+    const lista = app.nucleo.agenda.eventosDoPeriodo(segunda, domingo)
+      .map((dia) => ({
+        data: dia.data,
+        eventos: dia.eventos.filter((e) => CATEGORIAS_DA_SEMANA.indexOf(e.categoria) >= 0)
+      }))
+      .filter((dia) => dia.eventos.length);
+
     const quantos = lista.reduce((n, dia) => n + dia.eventos.length, 0);
 
     if (!quantos) {
@@ -539,14 +553,6 @@
             el('span', { class: 'tag ' + evt.categoria, text: rotuloCategoria(evt.categoria) })
           ])
         ]);
-
-        if (evt.categoria === 'sessao' && String(evt.agenda_dia || '').trim()) {
-          bloco.classList.add('com-detalhe');
-          bloco.appendChild(el('div', { class: 'pauta' }, [
-            el('h4', { text: 'Agenda do Dia' }),
-            el('pre', { text: String(evt.agenda_dia).trim() })
-          ]));
-        }
 
         caixa.appendChild(bloco);
       }

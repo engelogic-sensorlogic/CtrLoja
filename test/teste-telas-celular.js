@@ -263,14 +263,12 @@ for (const fora of ['grupos', 'envios_log', 'controle_disparo']) delete pacote.d
   console.log('\n== Chancelaria: destravada ==');
   ok('a senha certa destrava', !doc.querySelector('#conteudo .cadeado'));
   ok('abas do cargo aparecem',
-    abas().join() === 'Eventos da Semana,Mensagens,Presença,Obreiros,Solicitar', abas().join(' | '));
+    abas().join() === 'Mensagens,Semana,Presença,Obreiros,Solicitar', abas().join(' | '));
+  ok('a Semana fica entre Mensagens e Presença',
+    abas().indexOf('Semana') === abas().indexOf('Mensagens') + 1
+    && abas().indexOf('Presença') === abas().indexOf('Semana') + 1);
   ok('o cadeado sai da barra',
     !areas().find((a) => a.includes('Chancelaria')).includes('🔒'));
-  ok('abre em Eventos da Semana', /Semana de /.test(texto()));
-
-  // O disparo vive na aba Mensagens, que agora não é mais a primeira
-  clicarAba('Mensagens');
-  await new Promise((r) => setTimeout(r, 60));
 
   doc.querySelector('#conteudo input[type=date]').value = '2026-08-10';
   doc.querySelector('#conteudo input[type=date]').dispatchEvent(new janela.Event('change', { bubbles: true }));
@@ -333,8 +331,8 @@ for (const fora of ['grupos', 'envios_log', 'controle_disparo']) delete pacote.d
   };
 
   const eventosDaSemana = async () => {
-  console.log('\n== Eventos da Semana (Chancelaria) ==');
-  clicarAba('Eventos da Semana');
+  console.log('\n== Semana (Chancelaria) ==');
+  clicarAba('Semana');
   await new Promise((r) => setTimeout(r, 80));
 
   ok('declara o intervalo da semana', /Semana de /.test(texto()));
@@ -343,6 +341,12 @@ for (const fora of ['grupos', 'envios_log', 'controle_disparo']) delete pacote.d
   ok('não oferece envio nem marcação',
     !botoes().some((b) => /Enviar|WhatsApp/i.test(b))
     && !doc.querySelector('#conteudo input[type=checkbox]'));
+
+  /* A sessão da Loja não entra: quem ouve a leitura já está nela. */
+  ok('NÃO lista a sessão da Loja',
+    ![...doc.querySelectorAll('#conteudo .tag')].some((t) => /Sessão/.test(t.textContent)),
+    [...doc.querySelectorAll('#conteudo .tag')].map((t) => t.textContent).join(' | ') || 'sem etiquetas');
+  ok('NÃO mostra a Agenda do Dia', !/Agenda do Dia/.test(texto()));
 
   /* A lista é lida em sessão: a fonte tem de ser maior que a do resto. */
   ok('usa o estilo de leitura ampliada',

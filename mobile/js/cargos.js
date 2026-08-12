@@ -49,8 +49,8 @@
       publico: false,
       disponivel: true,
       abas: [
-        { chave: 'semana', nome: 'Eventos da Semana' },
         { chave: 'mensagens', nome: 'Mensagens' },
+        { chave: 'semana', nome: 'Semana' },
         { chave: 'chamada', nome: 'Presença' },
         { chave: 'obreiros', nome: 'Obreiros' },
         { chave: 'solicitar', nome: 'Solicitar' }

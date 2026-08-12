@@ -135,8 +135,8 @@ function subirServidor(dirDados) {
   ok('Início não tem disparo, nem Obreiros, nem a chamada, nem lançamento',
     !cargos.abasDe('inicio').some((a) => ['mensagens', 'obreiros', 'chamada', 'extrato'].includes(a.chave)));
 
-  ok('Chancelaria: Semana, Mensagens, Presença, Obreiros e Solicitar',
-    cargos.abasDe('chancelaria').map((a) => a.chave).join() === 'semana,mensagens,chamada,obreiros,solicitar',
+  ok('Chancelaria: Mensagens, Semana, Presença, Obreiros e Solicitar',
+    cargos.abasDe('chancelaria').map((a) => a.chave).join() === 'mensagens,semana,chamada,obreiros,solicitar',
     cargos.abasDe('chancelaria').map((a) => a.chave).join());
   ok('Secretaria: Agenda da Loja, Obreiros e Solicitar',
     cargos.abasDe('secretaria').map((a) => a.chave).join() === 'agenda,obreiros,solicitar',
