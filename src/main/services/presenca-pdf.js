@@ -256,34 +256,54 @@ function montarHtml(dados, cfg, logos) {
 const ABREVIACAO_GRAU = { Aprendiz: 'Apr.', Companheiro: 'Comp.', Mestre: 'Mestre' };
 const abreviarGrau = (g) => ABREVIACAO_GRAU[g] || String(g || '');
 
-/** Grafico de barras em SVG, montado como texto - sem biblioteca. */
+/**
+ * Grafico de barras em SVG, montado como texto - sem biblioteca.
+ *
+ * Conta PESSOAS, nao porcentagem. Era percentual, e ficaria incoerente
+ * empilhar visitantes sobre ele: o visitante nao tem denominador,
+ * porque nao pertence ao quadro. Em contagem, a barra responde a
+ * pergunta que quem passa diante do mural faz: quantos estiveram no
+ * Templo naquela noite.
+ */
 function graficoSvg(sessoes) {
   const dados = sessoes.slice(-16);
   if (!dados.length) return '';
 
-  const L = 1000, A = 260, base = A - 44, topo = 18, esquerda = 40;
+  const L = 1000, A = 270, base = A - 44, topo = 18, esquerda = 44;
   const passo = (L - esquerda) / dados.length;
   const barra = Math.min(passo * 0.62, 48);
 
-  const media = dados.reduce((s, d) => s + d.percentual, 0) / dados.length;
-  const y = (pct) => base - (pct / 100) * (base - topo);
+  const maior = Math.max(1, ...dados.map((d) => (d.presentes || 0) + (d.visitantes || 0)));
+  const media = dados.reduce((s, d) => s + (d.presentes || 0), 0) / dados.length;
+  const alt = (n) => (n / maior) * (base - topo);
 
   const partes = [];
 
-  for (const pct of [25, 50, 75, 100]) {
-    partes.push(`<line x1="${esquerda}" y1="${y(pct)}" x2="${L}" y2="${y(pct)}" stroke="#A9D4D0" stroke-width="1"/>`);
-    partes.push(`<text x="${esquerda - 6}" y="${y(pct) + 4}" text-anchor="end" font-size="11" fill="#4A6168">${pct}%</text>`);
+  const degrau = Math.max(1, Math.ceil(maior / 4));
+  for (let n = degrau; n <= maior; n += degrau) {
+    const y = base - alt(n);
+    partes.push(`<line x1="${esquerda}" y1="${y}" x2="${L}" y2="${y}" stroke="#A9D4D0" stroke-width="1"/>`);
+    partes.push(`<text x="${esquerda - 6}" y="${y + 4}" text-anchor="end" font-size="11" fill="#4A6168">${n}</text>`);
   }
 
-  partes.push(`<line x1="${esquerda}" y1="${y(media)}" x2="${L}" y2="${y(media)}" stroke="#008CCC" stroke-width="2" stroke-dasharray="8 5"/>`);
+  const yMedia = base - alt(media);
+  partes.push(`<line x1="${esquerda}" y1="${yMedia}" x2="${L}" y2="${yMedia}" stroke="#008CCC" stroke-width="2" stroke-dasharray="8 5"/>`);
 
   dados.forEach((d, i) => {
-    const altura = Math.max(3, (d.percentual / 100) * (base - topo));
     const x = esquerda + i * passo + (passo - barra) / 2;
-    const cor = d.percentual >= media ? '#008CCC' : '#8FC4DA';
+    const hP = Math.max(3, alt(d.presentes || 0));
+    const visitantes = d.visitantes || 0;
+    const hV = visitantes ? Math.max(3, alt(visitantes)) : 0;
+    const cor = (d.presentes || 0) >= media ? '#008CCC' : '#8FC4DA';
 
-    partes.push(`<rect x="${x}" y="${base - altura}" width="${barra}" height="${altura}" rx="4" fill="${cor}"/>`);
-    partes.push(`<text x="${x + barra / 2}" y="${base - altura - 6}" text-anchor="middle" font-size="13" font-weight="700" fill="#10262B">${d.presentes}</text>`);
+    /* Visitantes empilhados por cima, na mesma escala de pessoas. */
+    if (visitantes) {
+      partes.push(`<rect x="${x}" y="${base - hP - hV}" width="${barra}" height="${hV}" rx="4" fill="#8E44AD"/>`);
+      partes.push(`<text x="${x + barra / 2}" y="${base - hP - hV - 6}" text-anchor="middle" font-size="12" font-weight="700" fill="#8E44AD">+${visitantes}</text>`);
+    }
+
+    partes.push(`<rect x="${x}" y="${base - hP}" width="${barra}" height="${hP}" rx="4" fill="${cor}"/>`);
+    partes.push(`<text x="${x + barra / 2}" y="${base - hP + (hP > 20 ? 16 : -6)}" text-anchor="middle" font-size="13" font-weight="700" fill="${hP > 20 ? '#FFFFFF' : '#10262B'}">${d.presentes}</text>`);
     partes.push(`<text x="${x + barra / 2}" y="${A - 24}" text-anchor="middle" font-size="11" fill="#4A6168">${d.data.slice(8, 10)}/${d.data.slice(5, 7)}</text>`);
     partes.push(`<text x="${x + barra / 2}" y="${A - 10}" text-anchor="middle" font-size="9" fill="#8098A0">${esc(abreviarGrau(d.grau))}</text>`);
   });
@@ -335,14 +355,24 @@ function montarHtmlFrequencia(est, cfg, logos) {
   h2 { text-align: center; font-size: 17pt; letter-spacing: 2px; margin: 16px 0 4px; color: #0070A6; }
   .periodo { text-align: center; font-size: 10pt; color: #4A6168; margin-bottom: 16px; }
 
-  .resumo { display: flex; gap: 12px; margin-bottom: 18px; }
+  .resumo { display: flex; gap: 12px; margin-bottom: 14px; }
   .resumo div { flex: 1; border: 1px solid #A9D4D0; border-radius: 6px; padding: 10px; text-align: center; background: #E3F2F1; }
   .resumo strong { display: block; font-size: 24pt; line-height: 1.1; color: #008CCC; }
   .resumo span { font-size: 8.5pt; color: #4A6168; text-transform: uppercase; letter-spacing: .6px; }
 
+  /* Visitante nao pertence ao quadro: a cor propria evita que alguem
+     leia o numero como se fosse frequencia dos nossos. */
+  .resumo .visita { background: #F3EAF8; border-color: #D8C2E6; }
+  .resumo .visita strong { color: #8E44AD; }
+
+  .visitas { font-size: 9.5pt; color: #4A6168; text-align: center; margin: 0 0 14px; line-height: 1.5; }
+
   .grafico { border: 1px solid #A9D4D0; border-radius: 6px; padding: 10px 12px 4px; margin-bottom: 8px; }
   .grafico h3 { margin: 0 0 6px; font-size: 11pt; color: #0070A6; }
   .nota { font-size: 8.5pt; color: #4A6168; margin: 0 0 18px; text-align: center; }
+  .chave { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; }
+  .chave.azul { background: #008CCC; }
+  .chave.roxo { background: #8E44AD; }
 
   table { width: 100%; border-collapse: collapse; }
   th { background: #C7E6E3; border: 1px solid #A9D4D0; padding: 6px; font-size: 9pt;
@@ -383,15 +413,28 @@ function montarHtmlFrequencia(est, cfg, logos) {
     <div><strong>${est.quadro}</strong><span>Obreiros no quadro</span></div>
     <div><strong>${est.media_presentes}</strong><span>Média de presentes</span></div>
     <div><strong>${est.percentual_medio}%</strong><span>Comparecimento médio</span></div>
+    <div class="visita"><strong>${est.total_visitantes || 0}</strong><span>Visitantes recebidos</span></div>
   </div>
+
+  ${est.total_visitantes ? `
+  <p class="visitas">
+    A Loja recebeu <strong>${est.total_visitantes}</strong> visitante(s) em
+    ${est.sessoes_com_visita} das ${est.total_sessoes} sessões — média de
+    ${est.media_visitantes} por sessão.
+    ${est.melhor_visita ? `Mais visitada: ${esc(dataExtenso(est.melhor_visita.data))},
+      com ${est.melhor_visita.visitantes}.` : ''}
+  </p>` : ''}
 
   ${est.sessoes.length ? `
   <div class="grafico">
-    <h3>Comparecimento por sessão</h3>
+    <h3>Presentes no Templo, sessão a sessão</h3>
     ${graficoSvg(est.sessoes)}
   </div>
-  <p class="nota">Cada barra é uma sessão; o número acima indica quantos Irmãos compareceram.
-     A linha tracejada marca a média do período.</p>` : ''}
+  <p class="nota">
+    <span class="chave azul"></span> Irmãos do quadro
+    &nbsp;&nbsp;<span class="chave roxo"></span> visitantes de outras Lojas
+    &nbsp;&middot;&nbsp; a linha tracejada marca a média de presentes do quadro.
+  </p>` : ''}
 
   <table>
     <thead><tr>

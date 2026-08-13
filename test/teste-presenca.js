@@ -546,11 +546,44 @@ ok('mostra os números da Loja',
   && mural.includes('>Média de presentes<') && mural.includes('>Comparecimento médio<'));
 
 ok('desenha o gráfico em SVG', /<svg[^>]*viewBox/.test(mural));
-ok('o gráfico tem uma barra por sessão',
-  (mural.match(/<rect /g) || []).length === estMural.sessoes.length,
-  `${(mural.match(/<rect /g) || []).length} barras para ${estMural.sessoes.length} sessões`);
+/* Cada sessão desenha a barra do quadro; as que receberam visita
+   desenham uma segunda, empilhada. Contar uma por sessão deixaria de
+   valer no dia em que os visitantes entraram - e foi o que aconteceu. */
+const barrasEsperadas = estMural.sessoes.length + estMural.sessoes_com_visita;
+ok('uma barra por sessão, mais uma por visita recebida',
+  (mural.match(/<rect /g) || []).length === barrasEsperadas,
+  `${(mural.match(/<rect /g) || []).length} barras para ${estMural.sessoes.length} sessões `
+  + `e ${estMural.sessoes_com_visita} com visita`);
 ok('o gráfico marca a média', /stroke-dasharray/.test(mural));
-ok('o gráfico traz a régua de porcentagem', /&gt;|>25%</.test(mural) || mural.includes('>25%<'));
+
+console.log('\n== Visitantes no relatório do mural ==');
+
+ok('conta os visitantes no cabeçalho', /Visitantes recebidos/.test(mural));
+ok('mostra o total recebido',
+  new RegExp('>' + estMural.total_visitantes + '</strong><span>Visitantes').test(mural),
+  String(estMural.total_visitantes));
+ok('resume onde e quanto', /A Loja recebeu/.test(mural) && /Mais visitada/.test(mural));
+
+/* A barra do visitante é empilhada sobre a do quadro, em roxo. */
+ok('desenha o segmento dos visitantes', /fill="#8E44AD"/.test(mural));
+ok('marca a quantidade acima da barra', /&gt;\+\d|>\+\d/.test(mural));
+ok('a legenda explica as duas cores',
+  /Irmãos do quadro/.test(mural) && /visitantes de outras Lojas/.test(mural));
+ok('o gráfico conta pessoas, não porcentagem', !/>\d+%<\/text>/.test(mural));
+ok('o título diz o que a barra mostra', /Presentes no Templo/.test(mural));
+
+/* Sem visita nenhuma, o relatório não inventa bloco vazio. */
+const semVisita = pdf.montarHtmlFrequencia(
+  Object.assign({}, estMural, {
+    total_visitantes: 0, sessoes_com_visita: 0, media_visitantes: 0, melhor_visita: null,
+    sessoes: estMural.sessoes.map((s) => Object.assign({}, s, { visitantes: 0, no_templo: s.presentes }))
+  }), cfg, {});
+ok('sem visitantes, não há parágrafo à toa', !/A Loja recebeu/.test(semVisita));
+ok('sem visitantes, o quadro de contagem continua', /Visitantes recebidos/.test(semVisita));
+ok('sem visitantes, nenhuma barra roxa', !/fill="#8E44AD"/.test(semVisita));
+/* A régua acompanhou o gráfico: era de porcentagem, virou de pessoas. */
+ok('a régua está em pessoas, não em porcentagem',
+  !/>\d+%<\/text>/.test(mural) && /<text[^>]*text-anchor="end"[^>]*>\d+<\/text>/.test(mural));
 
 ok('lista todos os Irmãos com frequência',
   estMural.obreiros.every((o) => mural.includes(o.nome)));
