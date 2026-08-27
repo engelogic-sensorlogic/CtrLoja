@@ -1,10 +1,10 @@
 {
   "formato": "ctrloja-versao",
-  "versao": 31,
-  "gerado_em": "2026-08-18T15:13:54.824Z",
+  "versao": 32,
+  "gerado_em": "2026-08-27T10:50:54.043Z",
   "arquivo": "agenda.enc",
-  "bytes": 160728,
-  "impressao": "86ff6a78ef38edb0f7aa07ec5f521025fa46bfd4d22c0c3f0a76f7892425af8d",
+  "bytes": 159636,
+  "impressao": "aac448e0cd226e221b1f310a61d9c8012d974214d0f4c081a7152f726e61c8d5",
   "cargos": [
     "chancelaria",
     "secretaria",
